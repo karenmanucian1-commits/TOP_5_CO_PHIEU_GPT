@@ -99,7 +99,11 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python send_top5_telegram_pro.py
-
+      - name: Send AI Decision to Telegram
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python ai_decision_top5.py
       # =========================================================
       # SAVE UPDATED CACHE
       # =========================================================
