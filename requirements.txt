@@ -15,7 +15,7 @@ pydantic
 pytz
 seaborn
 tenacity
-vnai
-vnstock_ezchart
+./vnai_local
+
 
 ./vnstock_local
