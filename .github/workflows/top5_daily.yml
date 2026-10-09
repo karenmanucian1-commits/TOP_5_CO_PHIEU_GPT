@@ -127,5 +127,7 @@ jobs:
             echo "TOP5 history has no changes."
           else
             git commit -m "Update TOP5 history"
-            git push
+
+            git pull --rebase origin main
+            git push origin HEAD:main
           fi
