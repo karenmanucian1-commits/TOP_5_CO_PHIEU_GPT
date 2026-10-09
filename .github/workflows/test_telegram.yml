@@ -1,0 +1,53 @@
+name: Test Telegram Bot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-telegram:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send test message
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: |
+          python - <<'PY'
+          import os
+          import json
+          import urllib.parse
+          import urllib.request
+
+          token = os.environ["BOT_TOKEN"]
+          chat_id = os.environ["CHAT_ID"]
+
+          message = """
+          ✅ TOP5 AI STOCK ADVISOR
+
+          Kết nối Telegram Bot mới thành công!
+
+          🤖 GitHub Actions: ONLINE
+          🔐 BOT_TOKEN: OK
+          👤 CHAT_ID: OK
+
+          Hệ thống TOP5 AI đã sẵn sàng gửi kết quả tự động.
+          """
+
+          url = f"https://api.telegram.org/bot{token}/sendMessage"
+
+          data = urllib.parse.urlencode({
+              "chat_id": chat_id,
+              "text": message.strip()
+          }).encode()
+
+          request = urllib.request.Request(url, data=data)
+
+          with urllib.request.urlopen(request, timeout=30) as response:
+              result = json.loads(response.read().decode())
+
+          if not result.get("ok"):
+              raise RuntimeError(result)
+
+          print("TELEGRAM TEST SUCCESS")
+          PY
