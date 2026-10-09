@@ -3,6 +3,15 @@ name: TOP5 AI Daily
 on:
   workflow_dispatch:
 
+  schedule:
+    # 05:00 Viet Nam (UTC+7), Thu 2 - Thu 6
+    # = 22:00 UTC ngay hom truoc, Chu Nhat - Thu Nam
+    - cron: "0 22 * * 0-4"
+
+    # 11:31 Viet Nam (UTC+7), Thu 2 - Thu 6
+    # = 04:31 UTC cung ngay
+    - cron: "31 4 * * 1-5"
+
 permissions:
   contents: write
 
