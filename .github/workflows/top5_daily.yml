@@ -1,0 +1,122 @@
+name: TOP5 AI Daily
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  top5-ai:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # =========================================================
+      # STOCK CACHE
+      # =========================================================
+
+      - name: Restore stock cache
+        id: stock-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: stock_cache
+          key: stock-cache-${{ github.run_id }}
+          restore-keys: |
+            stock-cache-
+
+      - name: Bootstrap stock cache from seed
+        if: steps.stock-cache.outputs.cache-hit != 'true'
+        run: |
+          if [ ! -d stock_cache ] || [ -z "$(find stock_cache -type f -name '*.csv' -print -quit 2>/dev/null)" ]; then
+            echo "No previous GitHub cache found."
+            echo "Restoring initial stock cache from stock_cache_seed.zip..."
+
+            mkdir -p stock_cache
+            unzip -q stock_cache_seed.zip -d stock_cache
+
+            echo "Initial cache restored."
+          else
+            echo "A restored stock cache already exists."
+          fi
+
+      - name: Verify stock cache
+        run: |
+          echo "CSV files in stock_cache:"
+          find stock_cache -maxdepth 1 -type f -name "*.csv" | wc -l
+
+          echo "Cache size:"
+          du -sh stock_cache
+
+          COUNT=$(find stock_cache -maxdepth 1 -type f -name "*.csv" | wc -l)
+
+          if [ "$COUNT" -lt 687 ]; then
+            echo "ERROR: stock_cache is incomplete. Expected at least 687 CSV files."
+            exit 1
+          fi
+
+      # =========================================================
+      # TOP5 PIPELINE
+      # =========================================================
+
+      - name: Update market data
+        run: python update_scanner_data.py
+
+      - name: Build scanner dataset
+        run: python build_scanner_dataset_v2.py
+
+      - name: Scan TOP 5
+        run: python daily_scanner_v2.py
+
+      - name: Update forward tracking
+        run: python evaluate_top5_forward.py
+
+      - name: Send TOP 5 to Telegram
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python send_top5_telegram_pro.py
+
+      # =========================================================
+      # SAVE UPDATED CACHE
+      # =========================================================
+
+      - name: Save updated stock cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: stock_cache
+          key: stock-cache-${{ github.run_id }}
+
+      # =========================================================
+      # SAVE FORWARD HISTORY
+      # =========================================================
+
+      - name: Save TOP5 history to repository
+        if: success()
+        run: |
+          git config user.name "TOP5 AI Bot"
+          git config user.email "top5-ai-bot@users.noreply.github.com"
+
+          git add TOP5_V2_HISTORY.csv
+
+          if git diff --cached --quiet; then
+            echo "TOP5 history has no changes."
+          else
+            git commit -m "Update TOP5 history"
+            git push
+          fi

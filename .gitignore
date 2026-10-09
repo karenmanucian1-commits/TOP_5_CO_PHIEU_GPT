@@ -1,0 +1,70 @@
+# SECRET - TUYET DOI KHONG DAY LEN GITHUB
+telegram_config.json
+.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Logs / temporary files
+*.log
+*.tmp
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+# LARGE DATA / CACHE - KHONG DAY LEN GITHUB
+stock_cache/
+stock_cache_BACKUP_20261008/
+time_splits/
+
+scanner_dataset_v2.csv
+training_dataset*.csv
+train_2023_2024.csv
+validation_2025.csv
+test_2026_LOCKED.csv
+
+model_dataset*.csv
+walk_forward*_predictions.csv
+
+# Research / backtest output
+audit_*.csv
+backtest_*.csv
+baseline_*.csv
+daily_top5_*.csv
+dynamic_filter_report.csv
+extreme_*.csv
+features_v2_report.csv
+feature_errors.csv
+feature_quality_report.csv
+history_coverage.csv
+liquidity_*.csv
+model01_*.csv
+portfolio_*.csv
+reverse_signal_*.csv
+technical_features.csv
+trace_*.csv
+tradable_universe_audit.csv
+universe_analysis.csv
+universe_filter_scenarios.csv
+walk_forward*_summary.csv
+walk_forward_*by_fold.csv
+walk_forward_symbol_concentration.csv
+walk_forward_top_*.csv
+value20_formula_check.csv
+
+# Scanner generated outputs
+scanner_update_report.csv
+TOP5_V2_TODAY.csv
+TOP5_V2_FORWARD_RESULTS.csv
+TOP5_V2_FORWARD_SUMMARY.csv
+requirements_full.txt
+stock_cache_cloud/
