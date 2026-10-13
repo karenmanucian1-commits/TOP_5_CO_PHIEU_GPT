@@ -3,7 +3,7 @@ import os
 import ssl
 import urllib.request
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 import certifi
 import numpy as np
@@ -887,7 +887,7 @@ def prepare_analyses(df):
 # ============================================================
 
 def build_messages(df, signal_date):
-    now = datetime.now()
+    now = datetime.now(timezone(timedelta(hours=7)))
     records, setup_rank = prepare_analyses(df)
 
     if not records:
