@@ -626,17 +626,55 @@ def nearest_support(row):
 
 def resistance_levels(row):
     close = safe_float(row.get("close"))
+    atr = safe_float(row.get("ATR14"))
+
+    if pd.isna(close) or close <= 0:
+        return np.nan, np.nan
+
+    if pd.isna(atr) or atr <= 0:
+        atr = close * 0.025
+
     candidates = [
         safe_float(row.get("SWING_HIGH")),
         safe_float(row.get("PREV_HIGH20")),
         safe_float(row.get("PREV_HIGH60")),
     ]
-    valid = sorted(set(
+
+    # T1: kháng cự gần, tối đa 4 ATR và không quá 12%.
+    near_limit = min(
+        close + 4.0 * atr,
+        close * 1.12
+    )
+
+    # T2: kháng cự mở rộng, tối đa 6 ATR và không quá 20%.
+    far_limit = min(
+        close + 6.0 * atr,
+        close * 1.20
+    )
+
+    valid_near = sorted(set(
         round(x, 8) for x in candidates
-        if not pd.isna(x) and x > close * 1.002
+        if (
+            not pd.isna(x)
+            and x > close * 1.002
+            and x <= near_limit
+        )
     ))
-    near = valid[0] if valid else np.nan
-    far = valid[1] if len(valid) > 1 else np.nan
+
+    near = valid_near[0] if valid_near else np.nan
+
+    valid_far = sorted(set(
+        round(x, 8) for x in candidates
+        if (
+            not pd.isna(x)
+            and x > close * 1.002
+            and x <= far_limit
+            and (pd.isna(near) or x > near * 1.002)
+        )
+    ))
+
+    far = valid_far[0] if valid_far else np.nan
+
     return near, far
 
 

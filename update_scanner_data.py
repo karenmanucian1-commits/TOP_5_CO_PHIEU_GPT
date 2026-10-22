@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import time
 import shutil
 import pandas as pd
-from vnstock.api.quote import Quote
+import kbs_client
 
 # ============================================================
 # TOP5_AI - UPDATE SCANNER MARKET DATA
@@ -18,7 +18,7 @@ from vnstock.api.quote import Quote
 
 BASE_DIR = Path(__file__).resolve().parent
 
-UNIVERSE_FILE = BASE_DIR / "quality_universe.csv"
+UNIVERSE_FILE = BASE_DIR / "universe.csv"
 CACHE_DIR = BASE_DIR / "stock_cache"
 SUMMARY_FILE = BASE_DIR / "universe_liquidity.csv"
 
@@ -42,7 +42,7 @@ FALLBACK_START_DATE = date(2022, 1, 1)
 # cac phien gan nhat.
 REFRESH_DAYS = 7
 
-REQUEST_DELAY = 4.0
+REQUEST_DELAY = 0.7
 
 print("=" * 78)
 print("TOP5_AI - UPDATE SCANNER DATA")
@@ -139,7 +139,17 @@ def normalize_history(df):
 
     df["time"] = pd.to_datetime(
         df["time"],
-        errors="coerce"
+        errors="coerce",
+        utc=True
+    )
+
+    # Vnstock 5.x tra timestamp co timezone.
+    # Chuyen ve tz-naive de tuong thich cache cu.
+    df["time"] = (
+        df["time"]
+        .dt.tz_convert("Asia/Ho_Chi_Minh")
+        .dt.tz_localize(None)
+        .dt.normalize()
     )
 
     numeric_cols = [
@@ -273,10 +283,35 @@ def update_symbol(symbol):
     # tra ve phien gan nhat; lan sau van co the refresh.
     # --------------------------------------------------------
 
-    if (
-        not old.empty
-        and old_last >= END_DATE
-    ):
+    # --------------------------------------------------------
+    # REMOVE INCOMPLETE CURRENT SESSION FROM OLD CACHE
+    # --------------------------------------------------------
+
+    today_ts = pd.Timestamp(date.today())
+
+    if not old.empty:
+
+        old = old[
+            old["time"] < today_ts
+        ].copy()
+
+        if not old.empty:
+
+            old_first = (
+                old["time"]
+                .min()
+                .date()
+            )
+
+            old_last = (
+                old["time"]
+                .max()
+                .date()
+            )
+
+    # Khong CACHE theo ngay hien tai vi KBS co the tra
+    # nen intraday cua phien dang giao dich.
+    # Updater se refresh cac phien gan nhat tu KBS.
 
         return {
             "data": old,
@@ -291,20 +326,25 @@ def update_symbol(symbol):
     # API
     # --------------------------------------------------------
 
-    quote = Quote(
+    new = kbs_client.lich_su_gia(
         symbol=symbol,
-        source="VCI"
-    )
-
-    new = quote.history(
         start=fetch_start.isoformat(),
         end=END_DATE.isoformat(),
-        interval="1D"
     )
 
     new = normalize_history(
         new
     )
+
+    # KBS co the tra ca nen ngay hom nay khi phien dang giao dich.
+    # Chi giu cac phien da hoan tat, tranh dua du lieu intraday
+    # vao Frozen V2.
+    if not new.empty:
+        today_ts = pd.Timestamp(date.today())
+
+        new = new[
+            new["time"] < today_ts
+        ].copy()
 
     # --------------------------------------------------------
     # IMPORTANT SAFETY

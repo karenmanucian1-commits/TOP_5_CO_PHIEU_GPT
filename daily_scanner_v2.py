@@ -268,7 +268,33 @@ def main():
         sys.exit(1)
 
     today["SCORE"] = scores
+    # --------------------------------------------------------
+    # 4B. INVESTABILITY FILTER - POST MODEL
+    # --------------------------------------------------------
+    # Frozen V2 SCORE is kept unchanged.
+    # Filter weak-liquidity stocks before final Top 5 selection.
+    # Historical audit: VALUE20 >= 3B/day improved AvgRet20,
+    # median return and win rate without retraining Frozen V2.
+    MIN_VALUE20_INVESTABLE = 3_000_000  # ~3 billion VND/day
 
+    before_filter = len(today)
+
+    today = today[
+        today["VALUE20"].fillna(0) >= MIN_VALUE20_INVESTABLE
+    ].copy()
+
+    removed_filter = before_filter - len(today)
+
+    print(
+        f"Investability filter VALUE20 >= 3B/day: "
+        f"removed {removed_filter:,}, remaining {len(today):,}"
+    )
+
+    if len(today) < TOP_N:
+        raise RuntimeError(
+            f"Chi con {len(today)} ma sau Investability Filter, "
+            f"khong du de chon Top {TOP_N}."
+        )
     # --------------------------------------------------------
     # 5. TOP 5
     # --------------------------------------------------------
