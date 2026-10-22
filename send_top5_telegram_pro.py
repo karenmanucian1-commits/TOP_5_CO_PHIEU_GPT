@@ -751,8 +751,18 @@ def calculate_price_plan(row, total_score, mkt_score):
     target1 = max(target1, reference_buy + 0.50 * risk_amount)
     target2 = max(target2, target1 + 0.50 * atr)
 
+    # R:R ke hoach: tinh tai gia mua tham chieu trong Buy Zone.
     rr1 = (target1 - reference_buy) / risk_amount
     rr2 = (target2 - reference_buy) / risk_amount
+
+    # R:R hien tai: neu mua ngay tai gia close hien tai.
+    current_risk_amount = close - stop_loss
+    if current_risk_amount > 0:
+        current_rr1 = (target1 - close) / current_risk_amount
+        current_rr2 = (target2 - close) / current_risk_amount
+    else:
+        current_rr1 = 0.0
+        current_rr2 = 0.0
 
     return {
         "setup": setup,
@@ -771,6 +781,8 @@ def calculate_price_plan(row, total_score, mkt_score):
         "target2_pct": target2 / reference_buy - 1,
         "rr1": rr1,
         "rr2": rr2,
+        "current_rr1": current_rr1,
+        "current_rr2": current_rr2,
         "target2_type": target2_type,
     }
 
@@ -1030,7 +1042,8 @@ def build_messages(df, signal_date):
             f"🛑 Cut loss: {fmt_price(a['stop_loss'])} ({a['stop_pct']:.1%})",
             f"🎯 Target 1: {fmt_price(a['target1'])} (+{a['target1_pct']:.1%})",
             f"🚀 {target2_label}: {fmt_price(a['target2'])} (+{a['target2_pct']:.1%})",
-            f"⚖️ R:R kế hoạch: 1:{a['rr1']:.2f} → 1:{a['rr2']:.2f}",
+            f"⚖️ R:R kế hoạch (Entry {fmt_price(a['reference_buy'])}): 1:{a['rr1']:.2f} → 1:{a['rr2']:.2f}",
+            f"⚖️ R:R nếu mua ngay {fmt_price(close)}: 1:{a['current_rr1']:.2f} → 1:{a['current_rr2']:.2f}",
             "",
             f"📈 RSI14: {rsi:.1f}",
             f"💧 Volume: {vol_ratio:.2f}x — {volume_status(vol_ratio)}",

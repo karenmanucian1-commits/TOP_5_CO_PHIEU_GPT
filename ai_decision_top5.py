@@ -16,7 +16,7 @@ Mục đích:
 Không phải hệ thống đặt lệnh tự động.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import math
 
 import pandas as pd
@@ -117,8 +117,13 @@ def evaluate_candidate(ai_rank, setup_rank, row, a):
 
     setup_score = safe_float(a.get("setup_score"), 0.0)
     technical = safe_float(a.get("total"), 0.0)
+    # Planned R:R uses the reference entry inside Buy Zone.
     rr1 = safe_float(a.get("rr1"), 0.0)
     rr2 = safe_float(a.get("rr2"), 0.0)
+
+    # Current R:R uses the actual current close as entry.
+    current_rr1 = safe_float(a.get("current_rr1"), rr1)
+    current_rr2 = safe_float(a.get("current_rr2"), rr2)
 
     buy_low = safe_float(a.get("buy_low"))
     buy_high = safe_float(a.get("buy_high"))
@@ -298,7 +303,8 @@ def evaluate_candidate(ai_rank, setup_rank, row, a):
     if setup_score < 45:
         hard_no_buy = True
 
-    # Clamp
+    # Preserve the raw score for audit before displaying a 0-100 score.
+    raw_decision_score = decision_score
     decision_score = max(0.0, min(100.0, decision_score))
 
     # --------------------------------------------------------
@@ -320,7 +326,15 @@ def evaluate_candidate(ai_rank, setup_rank, row, a):
     elif below_buy_zone:
         action = "🟠 CHỜ ỔN ĐỊNH LẠI"
 
-    elif in_buy_zone and rr1 >= MIN_RR1 and setup_score >= MIN_SETUP_SCORE:
+    elif in_buy_zone and current_rr1 < MIN_RR1:
+        action = "🟠 CHỜ ĐIỂM VÀO TỐT HƠN - R:R HIỆN TẠI CHƯA ĐẠT"
+
+    elif (
+        in_buy_zone
+        and rr1 >= MIN_RR1
+        and current_rr1 >= MIN_RR1
+        and setup_score >= MIN_SETUP_SCORE
+    ):
         if market_score < 45:
             action = "🟠 THEO DÕI MUA THĂM DÒ"
         else:
@@ -335,6 +349,7 @@ def evaluate_candidate(ai_rank, setup_rank, row, a):
         "setup_rank": setup_rank,
         "ai_score": ai_score,
         "setup_score": setup_score,
+        "raw_decision_score": round(raw_decision_score, 1),
         "decision_score": round(decision_score, 1),
         "technical": technical,
         "setup": setup,
@@ -352,6 +367,8 @@ def evaluate_candidate(ai_rank, setup_rank, row, a):
 
         "rr1": rr1,
         "rr2": rr2,
+        "current_rr1": current_rr1,
+        "current_rr2": current_rr2,
         "rsi": rsi,
         "volume": volume,
         "rel20": rel20,
@@ -444,6 +461,11 @@ def choose_best(candidates):
         if c["rr1"] < MIN_RR1:
             continue
 
+        # If price is already in/near Buy Zone, only prioritize it when
+        # the R:R at the actual current price is also acceptable.
+        if c["in_buy_zone"] and c["current_rr1"] < MIN_RR1:
+            continue
+
         if c["market_score"] < 30:
             continue
 
@@ -520,7 +542,7 @@ def short_reason(c):
 def build_message(candidates, signal_date):
     best = choose_best(candidates)
 
-    now = datetime.now()
+    now = datetime.now(timezone(timedelta(hours=7)))
 
     first = candidates[0]
 
@@ -604,11 +626,14 @@ def build_message(candidates, signal_date):
         f"🛑 Cut loss: {fmt_price(best['stop'])}",
         f"🎯 Target 1: {fmt_price(best['target1'])}",
         f"🚀 Target 2: {fmt_price(best['target2'])}",
-        f"⚖️ R:R: 1:{best['rr1']:.2f} → 1:{best['rr2']:.2f}",
+        f"⚖️ R:R kế hoạch: 1:{best['rr1']:.2f} → 1:{best['rr2']:.2f}",
+        f"⚖️ R:R nếu mua ngay {fmt_price(best['close'])}: "
+        f"1:{best['current_rr1']:.2f} → 1:{best['current_rr2']:.2f}",
         "",
         f"⭐ Technical: {best['technical']:.1f}/100",
         f"🎯 Setup Score: {best['setup_score']:.1f}/100",
-        f"🧠 Decision Score: {best['decision_score']:.1f}/100",
+        f"🧠 Decision Score: {best['decision_score']:.1f}/100 "
+        f"(Raw {best['raw_decision_score']:.1f})",
         f"📈 RSI14: {best['rsi']:.1f}",
         f"💧 Volume: {best['volume']:.2f}x",
         f"💪 Relative 20D: {best['rel20']:+.2%}",
@@ -647,6 +672,12 @@ def build_message(candidates, signal_date):
             f"{fmt_price(best['buy_high'])}."
         )
 
+    elif best["in_buy_zone"] and best["current_rr1"] < MIN_RR1:
+        execution = (
+            f"{best['symbol']} đang ở/gần Buy Zone nhưng R:R tại giá hiện tại "
+            f"chưa đạt {MIN_RR1:.2f}. Chưa mua vội; chờ điểm vào tốt hơn."
+        )
+
     elif best["in_buy_zone"] and best["market_score"] < 45:
         execution = (
             f"{best['symbol']} đang gần vùng mua nhưng thị trường chưa thuận lợi. "
@@ -658,7 +689,7 @@ def build_message(candidates, signal_date):
         execution = (
             f"{best['symbol']} đang ở vùng có thể theo dõi mua "
             f"{fmt_price(best['buy_low'])}–{fmt_price(best['buy_high'])}; "
-            f"tuân thủ stop {fmt_price(best['stop'])}."
+            f"R:R hiện tại đạt yêu cầu và tuân thủ stop {fmt_price(best['stop'])}."
         )
 
     else:
