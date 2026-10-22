@@ -18,7 +18,7 @@ import kbs_client
 
 BASE_DIR = Path(__file__).resolve().parent
 
-UNIVERSE_FILE = BASE_DIR / "universe.csv"
+UNIVERSE_FILE = BASE_DIR / "quality_universe.csv"
 CACHE_DIR = BASE_DIR / "stock_cache"
 SUMMARY_FILE = BASE_DIR / "universe_liquidity.csv"
 
@@ -75,7 +75,7 @@ print("- Chi cap nhat du lieu thi truong.")
 if not UNIVERSE_FILE.exists():
 
     raise FileNotFoundError(
-        "Khong tim thay universe.csv"
+        "Khong tim thay quality_universe.csv"
     )
 
 universe = pd.read_csv(
@@ -92,7 +92,7 @@ for col in required_cols:
     if col not in universe.columns:
 
         raise ValueError(
-            f"universe.csv thieu cot: {col}"
+            f"quality_universe.csv thieu cot: {col}"
         )
 
 universe["symbol"] = (
@@ -116,7 +116,7 @@ universe = (
 )
 
 print(
-    f"\nUniverse: {len(universe):,} ma"
+    f"\nDaily quality universe: {len(universe):,} ma"
 )
 
 print(
@@ -276,34 +276,26 @@ def update_symbol(symbol):
         )
 
     # --------------------------------------------------------
-    # SESSION DATA POLICY
+    # STRICT EOD DATA POLICY
     #
-    # 05:00 VN  -> chi dung EOD phien giao dich truoc.
-    # 11:31 VN+ -> cho phep dung nen ngay hom nay do KBS tra ve,
-    #              dai dien du lieu chot phien sang.
-    # Frozen V2 khong thay doi.
+    # This updater feeds Frozen V2, so it accepts completed daily
+    # bars only. Current-day partial candles are always excluded.
+    # Midday prices are handled by midday_decision_top5.py.
     # --------------------------------------------------------
 
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
+    today_ts = pd.Timestamp(date.today())
 
-    vn_now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
-    today_ts = pd.Timestamp(vn_now.date())
-    allow_today = (vn_now.hour, vn_now.minute) >= (11, 31)
-
-    # Truoc 11:31, loai nen ngay hom nay neu cache cu tung luu
-    # du lieu intraday. Tu 11:31 tro di giu lai de cap nhat phien sang.
-    if not old.empty and not allow_today:
-        old = old[
-            old["time"] < today_ts
-        ].copy()
+    # Clean any partial current-day candle left by an older updater.
+    if not old.empty:
+        old = old[old["time"] < today_ts].copy()
 
         if not old.empty:
             old_first = old["time"].min().date()
             old_last = old["time"].max().date()
+            fetch_start = old_last - timedelta(days=REFRESH_DAYS)
 
     # --------------------------------------------------------
-    # API - LUON REFRESH KBS
+    # API - REFRESH KBS, KEEP COMPLETED EOD BARS ONLY
     # --------------------------------------------------------
 
     new = kbs_client.lich_su_gia(
@@ -314,13 +306,8 @@ def update_symbol(symbol):
 
     new = normalize_history(new)
 
-    # Truoc 11:31: khong cho nen ngay hien tai vao scanner.
-    # Tu 11:31: giu nen ngay hien tai de TOP5 buoi chieu
-    # su dung du lieu chot phien sang.
-    if not new.empty and not allow_today:
-        new = new[
-            new["time"] < today_ts
-        ].copy()
+    if not new.empty:
+        new = new[new["time"] < today_ts].copy()
 
     # --------------------------------------------------------
     # IMPORTANT SAFETY
@@ -563,6 +550,54 @@ def liquidity_stats(
 
 
 # ============================================================
+# 5B. MERGE DAILY LIQUIDITY INTO FULL-MARKET SUMMARY
+# ============================================================
+
+def save_liquidity_summary(daily_results):
+    """
+    Update liquidity stats for daily quality symbols while preserving
+    rows for all other symbols in the full-market liquidity table.
+    """
+    if not daily_results:
+        return
+
+    daily = pd.DataFrame(daily_results).copy()
+    daily["symbol"] = daily["symbol"].astype(str).str.strip().str.upper()
+
+    if SUMMARY_FILE.exists():
+        try:
+            full = pd.read_csv(SUMMARY_FILE)
+        except Exception:
+            full = pd.DataFrame()
+    else:
+        full = pd.DataFrame()
+
+    if not full.empty and "symbol" in full.columns:
+        full["symbol"] = full["symbol"].astype(str).str.strip().str.upper()
+        full = full[~full["symbol"].isin(set(daily["symbol"]))].copy()
+        summary = pd.concat([full, daily], ignore_index=True, sort=False)
+    else:
+        summary = daily
+
+    if "avg_value_20_billion" in summary.columns:
+        summary = (
+            summary
+            .sort_values(
+                "avg_value_20_billion",
+                ascending=False,
+                na_position="last",
+            )
+            .reset_index(drop=True)
+        )
+
+    summary.to_csv(
+        SUMMARY_FILE,
+        index=False,
+        encoding="utf-8-sig",
+    )
+
+
+# ============================================================
 # 6. RUN UPDATE
 # ============================================================
 
@@ -714,14 +749,7 @@ for position, row in enumerate(
     # --------------------------------------------------------
 
     if results:
-
-        pd.DataFrame(
-            results
-        ).to_csv(
-            SUMMARY_FILE,
-            index=False,
-            encoding="utf-8-sig"
-        )
+        save_liquidity_summary(results)
 
     pd.DataFrame(
         update_report
@@ -742,25 +770,7 @@ for position, row in enumerate(
 # ============================================================
 
 if results:
-
-    summary = pd.DataFrame(
-        results
-    )
-
-    summary = (
-        summary
-        .sort_values(
-            "avg_value_20_billion",
-            ascending=False
-        )
-        .reset_index(drop=True)
-    )
-
-    summary.to_csv(
-        SUMMARY_FILE,
-        index=False,
-        encoding="utf-8-sig"
-    )
+    save_liquidity_summary(results)
 
 
 # ============================================================
@@ -772,7 +782,7 @@ print("UPDATE SUMMARY")
 print("=" * 78)
 
 print(
-    f"Universe       : {total:,}"
+    f"Daily universe : {total:,}"
 )
 
 print(
@@ -816,13 +826,15 @@ if results:
 
 print("\nDA TAO:")
 print("- scanner_update_report.csv")
-print("- universe_liquidity.csv")
+print("- universe_liquidity.csv (merged; full-market rows preserved)")
 print("- stock_cache/*.csv updated")
 
 print("\nSAFETY:")
 print("- Existing historical cache preserved.")
 print("- Empty API response does not erase old cache.")
 print("- New symbol starts from 2022, not 500-day history.")
+print("- Current-day partial candle is NEVER used by Frozen V2.")
+print("- Full-market liquidity rows outside quality universe are preserved.")
 print("- Frozen model was NOT modified.")
 print("- Frozen model was NOT retrained.")
 
