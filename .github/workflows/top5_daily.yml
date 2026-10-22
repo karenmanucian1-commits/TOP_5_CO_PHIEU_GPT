@@ -1,4 +1,4 @@
-name: TOP5 AI Daily
+﻿name: TOP 5 Cổ Phiếu Hàng Ngày GPT
 
 on:
   workflow_dispatch:
