@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import date, timedelta
 import time
 import shutil
+import argparse
 import pandas as pd
 import kbs_client
 
@@ -18,7 +19,8 @@ import kbs_client
 
 BASE_DIR = Path(__file__).resolve().parent
 
-UNIVERSE_FILE = BASE_DIR / "quality_universe.csv"
+QUALITY_UNIVERSE_FILE = BASE_DIR / "quality_universe.csv"
+FULL_UNIVERSE_FILE = BASE_DIR / "universe.csv"
 CACHE_DIR = BASE_DIR / "stock_cache"
 SUMMARY_FILE = BASE_DIR / "universe_liquidity.csv"
 
@@ -44,9 +46,28 @@ REFRESH_DAYS = 7
 
 REQUEST_DELAY = 0.7
 
+# Quality-universe rules agreed for production.
+MIN_AVG_VOLUME_20 = 10_000
+MIN_TRADED_DAYS_20 = 15
+MAX_STALE_DAYS = 7
+
+parser = argparse.ArgumentParser(
+    description="Update TOP5 stock cache in daily or full-market mode."
+)
+parser.add_argument(
+    "--full",
+    action="store_true",
+    help="Refresh full market and rebuild quality_universe.csv.",
+)
+args = parser.parse_args()
+
+FULL_MODE = args.full
+UNIVERSE_FILE = FULL_UNIVERSE_FILE if FULL_MODE else QUALITY_UNIVERSE_FILE
+MODE_NAME = "FULL MARKET REFRESH" if FULL_MODE else "DAILY QUALITY UPDATE"
+
 print("=" * 78)
 print("TOP5_AI - UPDATE SCANNER DATA")
-print("FORWARD / PAPER DATA UPDATE")
+print(MODE_NAME)
 print("=" * 78)
 
 # ============================================================
@@ -75,7 +96,7 @@ print("- Chi cap nhat du lieu thi truong.")
 if not UNIVERSE_FILE.exists():
 
     raise FileNotFoundError(
-        "Khong tim thay quality_universe.csv"
+        f"Khong tim thay {UNIVERSE_FILE.name}"
     )
 
 universe = pd.read_csv(
@@ -92,7 +113,7 @@ for col in required_cols:
     if col not in universe.columns:
 
         raise ValueError(
-            f"quality_universe.csv thieu cot: {col}"
+            f"{UNIVERSE_FILE.name} thieu cot: {col}"
         )
 
 universe["symbol"] = (
@@ -116,7 +137,11 @@ universe = (
 )
 
 print(
-    f"\nDaily quality universe: {len(universe):,} ma"
+    f"\nMode: {MODE_NAME}"
+)
+
+print(
+    f"Input universe: {UNIVERSE_FILE.name} | {len(universe):,} ma"
 )
 
 print(
@@ -550,34 +575,50 @@ def liquidity_stats(
 
 
 # ============================================================
-# 5B. MERGE DAILY LIQUIDITY INTO FULL-MARKET SUMMARY
+# 5B. SAVE LIQUIDITY / REBUILD QUALITY UNIVERSE
 # ============================================================
 
-def save_liquidity_summary(daily_results):
+def save_liquidity_summary(current_results):
     """
-    Update liquidity stats for daily quality symbols while preserving
-    rows for all other symbols in the full-market liquidity table.
+    DAILY mode:
+      merge refreshed quality-symbol stats into any existing summary.
+
+    FULL mode:
+      write a fresh full-market summary from the current full run.
     """
-    if not daily_results:
+    if not current_results:
         return
 
-    daily = pd.DataFrame(daily_results).copy()
-    daily["symbol"] = daily["symbol"].astype(str).str.strip().str.upper()
+    current = pd.DataFrame(current_results).copy()
+    current["symbol"] = (
+        current["symbol"].astype(str).str.strip().str.upper()
+    )
 
-    if SUMMARY_FILE.exists():
-        try:
-            full = pd.read_csv(SUMMARY_FILE)
-        except Exception:
+    if FULL_MODE:
+        summary = current
+    else:
+        if SUMMARY_FILE.exists():
+            try:
+                full = pd.read_csv(SUMMARY_FILE)
+            except Exception:
+                full = pd.DataFrame()
+        else:
             full = pd.DataFrame()
-    else:
-        full = pd.DataFrame()
 
-    if not full.empty and "symbol" in full.columns:
-        full["symbol"] = full["symbol"].astype(str).str.strip().str.upper()
-        full = full[~full["symbol"].isin(set(daily["symbol"]))].copy()
-        summary = pd.concat([full, daily], ignore_index=True, sort=False)
-    else:
-        summary = daily
+        if not full.empty and "symbol" in full.columns:
+            full["symbol"] = (
+                full["symbol"].astype(str).str.strip().str.upper()
+            )
+            full = full[
+                ~full["symbol"].isin(set(current["symbol"]))
+            ].copy()
+            summary = pd.concat(
+                [full, current],
+                ignore_index=True,
+                sort=False,
+            )
+        else:
+            summary = current
 
     if "avg_value_20_billion" in summary.columns:
         summary = (
@@ -594,6 +635,97 @@ def save_liquidity_summary(daily_results):
         SUMMARY_FILE,
         index=False,
         encoding="utf-8-sig",
+    )
+
+
+def rebuild_quality_universe(full_results):
+    """
+    Rebuild the tracked quality_universe.csv after a FULL market refresh.
+
+    Rules:
+      - avg_volume_20 >= 10,000 shares/session
+      - traded_days_20 >= 15/20
+      - latest data not stale by more than 7 calendar days
+    """
+    if not FULL_MODE:
+        return
+
+    if not full_results:
+        raise RuntimeError(
+            "FULL refresh khong co liquidity result; "
+            "khong ghi de quality_universe.csv."
+        )
+
+    full = pd.DataFrame(full_results).copy()
+
+    full["latest_date"] = pd.to_datetime(
+        full["latest_date"],
+        errors="coerce",
+    )
+    full["avg_volume_20"] = pd.to_numeric(
+        full["avg_volume_20"],
+        errors="coerce",
+    )
+    full["traded_days_20"] = pd.to_numeric(
+        full["traded_days_20"],
+        errors="coerce",
+    )
+
+    # Use the newest completed market date observed in this full run.
+    # This avoids wrongly penalizing the whole market for weekends/holidays.
+    market_date = full["latest_date"].max()
+
+    if pd.isna(market_date):
+        raise RuntimeError(
+            "Khong xac dinh duoc market_date de rebuild quality universe."
+        )
+
+    stale_days = (
+        market_date.normalize()
+        - full["latest_date"].dt.normalize()
+    ).dt.days
+
+    quality = full[
+        (full["avg_volume_20"].fillna(0) >= MIN_AVG_VOLUME_20)
+        & (full["traded_days_20"].fillna(0) >= MIN_TRADED_DAYS_20)
+        & (stale_days.fillna(9999) <= MAX_STALE_DAYS)
+    ].copy()
+
+    quality["latest_date"] = (
+        quality["latest_date"].dt.strftime("%Y-%m-%d")
+    )
+
+    # Keep stable output order for clean Git diffs.
+    quality = (
+        quality
+        .sort_values(["exchange", "symbol"])
+        .reset_index(drop=True)
+    )
+
+    if quality.empty:
+        raise RuntimeError(
+            "Quality universe rong sau FULL refresh; "
+            "khong ghi de file production."
+        )
+
+    quality.to_csv(
+        QUALITY_UNIVERSE_FILE,
+        index=False,
+        encoding="utf-8-sig",
+    )
+
+    print()
+    print("=" * 78)
+    print("QUALITY UNIVERSE REBUILT")
+    print("=" * 78)
+    print(f"Full liquidity rows : {len(full):,}")
+    print(f"Quality symbols     : {len(quality):,}")
+    print(f"Market date         : {market_date.date()}")
+    print(
+        "Rules               : "
+        f"avg_volume_20 >= {MIN_AVG_VOLUME_20:,}; "
+        f"traded_days_20 >= {MIN_TRADED_DAYS_20}; "
+        f"stale <= {MAX_STALE_DAYS} days"
     )
 
 
@@ -748,7 +880,7 @@ for position, row in enumerate(
     # CHECKPOINT
     # --------------------------------------------------------
 
-    if results:
+    if results and not FULL_MODE:
         save_liquidity_summary(results)
 
     pd.DataFrame(
@@ -772,6 +904,9 @@ for position, row in enumerate(
 if results:
     save_liquidity_summary(results)
 
+    if FULL_MODE:
+        rebuild_quality_universe(results)
+
 
 # ============================================================
 # 8. FINAL REPORT
@@ -782,7 +917,7 @@ print("UPDATE SUMMARY")
 print("=" * 78)
 
 print(
-    f"Daily universe : {total:,}"
+    f"Input universe : {total:,}"
 )
 
 print(
@@ -826,7 +961,11 @@ if results:
 
 print("\nDA TAO:")
 print("- scanner_update_report.csv")
-print("- universe_liquidity.csv (merged; full-market rows preserved)")
+if FULL_MODE:
+    print("- universe_liquidity.csv (fresh full-market summary)")
+    print("- quality_universe.csv (rebuilt)")
+else:
+    print("- universe_liquidity.csv (merged; existing rows preserved)")
 print("- stock_cache/*.csv updated")
 
 print("\nSAFETY:")
@@ -834,7 +973,10 @@ print("- Existing historical cache preserved.")
 print("- Empty API response does not erase old cache.")
 print("- New symbol starts from 2022, not 500-day history.")
 print("- Current-day partial candle is NEVER used by Frozen V2.")
-print("- Full-market liquidity rows outside quality universe are preserved.")
+if FULL_MODE:
+    print("- Full mode rebuilt quality_universe.csv from fresh full-market data.")
+else:
+    print("- Daily mode preserves liquidity rows outside quality universe.")
 print("- Frozen model was NOT modified.")
 print("- Frozen model was NOT retrained.")
 
