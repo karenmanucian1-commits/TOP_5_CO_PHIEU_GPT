@@ -276,54 +276,34 @@ def update_symbol(symbol):
         )
 
     # --------------------------------------------------------
-    # ALREADY CURRENT?
+    # SESSION DATA POLICY
     #
-    # Neu cache co ngay END_DATE thi skip.
-    # Neu hom nay khong phai phien giao dich, API co the
-    # tra ve phien gan nhat; lan sau van co the refresh.
+    # 05:00 VN  -> chi dung EOD phien giao dich truoc.
+    # 11:31 VN+ -> cho phep dung nen ngay hom nay do KBS tra ve,
+    #              dai dien du lieu chot phien sang.
+    # Frozen V2 khong thay doi.
     # --------------------------------------------------------
 
-    # --------------------------------------------------------
-    # REMOVE INCOMPLETE CURRENT SESSION FROM OLD CACHE
-    # --------------------------------------------------------
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
-    today_ts = pd.Timestamp(date.today())
+    vn_now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+    today_ts = pd.Timestamp(vn_now.date())
+    allow_today = (vn_now.hour, vn_now.minute) >= (11, 31)
 
-    if not old.empty:
-
+    # Truoc 11:31, loai nen ngay hom nay neu cache cu tung luu
+    # du lieu intraday. Tu 11:31 tro di giu lai de cap nhat phien sang.
+    if not old.empty and not allow_today:
         old = old[
             old["time"] < today_ts
         ].copy()
 
         if not old.empty:
-
-            old_first = (
-                old["time"]
-                .min()
-                .date()
-            )
-
-            old_last = (
-                old["time"]
-                .max()
-                .date()
-            )
-
-    # Khong CACHE theo ngay hien tai vi KBS co the tra
-    # nen intraday cua phien dang giao dich.
-    # Updater se refresh cac phien gan nhat tu KBS.
-
-        return {
-            "data": old,
-            "status": "CACHE",
-            "old_first": old_first,
-            "old_last": old_last,
-            "new_last": old_last,
-            "added_rows": 0,
-        }
+            old_first = old["time"].min().date()
+            old_last = old["time"].max().date()
 
     # --------------------------------------------------------
-    # API
+    # API - LUON REFRESH KBS
     # --------------------------------------------------------
 
     new = kbs_client.lich_su_gia(
@@ -332,16 +312,12 @@ def update_symbol(symbol):
         end=END_DATE.isoformat(),
     )
 
-    new = normalize_history(
-        new
-    )
+    new = normalize_history(new)
 
-    # KBS co the tra ca nen ngay hom nay khi phien dang giao dich.
-    # Chi giu cac phien da hoan tat, tranh dua du lieu intraday
-    # vao Frozen V2.
-    if not new.empty:
-        today_ts = pd.Timestamp(date.today())
-
+    # Truoc 11:31: khong cho nen ngay hien tai vao scanner.
+    # Tu 11:31: giu nen ngay hien tai de TOP5 buoi chieu
+    # su dung du lieu chot phien sang.
+    if not new.empty and not allow_today:
         new = new[
             new["time"] < today_ts
         ].copy()
