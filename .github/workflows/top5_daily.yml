@@ -2,6 +2,15 @@
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Chế độ chạy"
+        required: true
+        default: "midday"
+        type: choice
+        options:
+          - midday
+          - morning
 
   schedule:
     # 05:00 Viet Nam (UTC+7), Thu 2 - Thu 6
@@ -83,36 +92,36 @@ jobs:
       # =========================================================
 
       - name: Update market data
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule != '31 4 * * 1-5' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python update_scanner_data.py
 
       - name: Build scanner dataset
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule != '31 4 * * 1-5' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python build_scanner_dataset_v2.py
 
       - name: Scan TOP 5
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule != '31 4 * * 1-5' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python daily_scanner_v2.py
 
       - name: Update forward tracking
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule != '31 4 * * 1-5' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python evaluate_top5_forward.py
 
       - name: Send TOP 5 to Telegram
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule != '31 4 * * 1-5' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python send_top5_telegram_pro.py
       - name: Send AI Decision to Telegram
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule != '31 4 * * 1-5' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python ai_decision_top5.py
 
       - name: Midday Decision - keep morning Frozen V2 TOP5
-        if: ${{ github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5' }}
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
@@ -122,7 +131,7 @@ jobs:
       # =========================================================
 
       - name: Save updated stock cache
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule != '31 4 * * 1-5' }} && success()
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }} && success()
         uses: actions/cache/save@v4
         with:
           path: stock_cache
@@ -133,7 +142,7 @@ jobs:
       # =========================================================
 
       - name: Save TOP5 history to repository
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule != '31 4 * * 1-5' }} && success()
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }} && success()
         run: |
           git config user.name "TOP5 AI Bot"
           git config user.email "top5-ai-bot@users.noreply.github.com"
