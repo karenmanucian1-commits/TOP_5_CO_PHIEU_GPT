@@ -127,3 +127,59 @@ def lich_su_gia(symbol, start, end):
     df["volume"] = df["volume"].astype(int)
 
     return df
+
+def gia_hien_tai(symbols):
+    """Lay snapshot gia hien tai tu bang gia KBS /stock/iss.
+
+    Tra ve DataFrame: symbol, price, reference, open, high, low, volume.
+    Price duoc chuan hoa ve nghin dong/co phieu, cung don vi voi stock_cache.
+    """
+    if isinstance(symbols, str):
+        symbols = [symbols]
+
+    symbols = [str(s).strip().upper() for s in symbols if str(s).strip()]
+    if not symbols:
+        return pd.DataFrame()
+
+    url = f"{_IIS_BASE_URL}/stock/iss"
+    headers = dict(_HEADERS)
+    headers["x-lang"] = "vi"
+
+    r = requests.post(
+        url,
+        headers=headers,
+        json={"code": ",".join(symbols)},
+        timeout=30,
+    )
+    r.raise_for_status()
+    data = r.json()
+
+    rows = data if isinstance(data, list) else data.get("data", [])
+    if not rows:
+        return pd.DataFrame()
+
+    out = pd.DataFrame(rows)
+    rename = {
+        "SB": "symbol",
+        "CP": "price",
+        "RE": "reference",
+        "OP": "open",
+        "HI": "high",
+        "LO": "low",
+        "TT": "volume",
+    }
+    out = out.rename(columns=rename)
+
+    if "symbol" not in out.columns or "price" not in out.columns:
+        return pd.DataFrame()
+
+    out["symbol"] = out["symbol"].astype(str).str.strip().str.upper()
+
+    for col in ["price", "reference", "open", "high", "low"]:
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce") / 1000.0
+
+    if "volume" in out.columns:
+        out["volume"] = pd.to_numeric(out["volume"], errors="coerce")
+
+    return out
