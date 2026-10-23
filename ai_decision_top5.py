@@ -303,6 +303,31 @@ def evaluate_candidate(ai_rank, setup_rank, row, a):
     if setup_score < 45:
         hard_no_buy = True
 
+    # --------------------------------------------------------
+    # CURRENT-PRICE EXECUTION GATE
+    # Decision Score must describe BUY-NOW quality, not only setup quality.
+    # A beautiful setup can still be a poor entry when current R:R is weak.
+    # --------------------------------------------------------
+    if current_rr1 < 0.75:
+        decision_score -= 35
+        warnings.append("R:R tại giá hiện tại rất thấp")
+    elif current_rr1 < 1.0:
+        decision_score -= 25
+        warnings.append("R:R tại giá hiện tại dưới 1.0")
+    elif current_rr1 < MIN_RR1:
+        decision_score -= 15
+        warnings.append("R:R tại giá hiện tại chưa đạt")
+    elif current_rr1 >= 2.0:
+        decision_score += 5
+        reasons.append("R:R tại giá hiện tại tốt")
+
+    # Hard cap: a candidate that cannot meet the minimum current-price R:R
+    # must never display an excellent Decision Score.
+    if current_rr1 < 1.0:
+        decision_score = min(decision_score, 49.0)
+    elif current_rr1 < MIN_RR1:
+        decision_score = min(decision_score, 64.0)
+
     # Preserve the raw score for audit before displaying a 0-100 score.
     raw_decision_score = decision_score
     decision_score = max(0.0, min(100.0, decision_score))
