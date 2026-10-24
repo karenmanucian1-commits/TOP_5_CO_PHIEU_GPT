@@ -405,6 +405,7 @@ def build_excel(sig,res):
 
 def verify_excel(path, expected_sig):
     """Fail closed: never upload a visually empty/invalid Forward Test workbook."""
+    from openpyxl import load_workbook
     wb=load_workbook(path,data_only=True)
     ws=wb["Tổng hợp"]
     expected={
