@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ISOLATED 6M methodology backtest. READS production assets; NEVER writes production bot files."""
+"""ISOLATED 6M methodology backtest. READS production assets; NEVER writes production bot files. Runner cache may be refreshed ephemerally."""
 from pathlib import Path
 import math, sqlite3, re
 import numpy as np, pandas as pd, joblib
