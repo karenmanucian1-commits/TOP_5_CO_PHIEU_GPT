@@ -46,7 +46,7 @@ def capture():
     now=datetime.now(VN)
     rows=[]
 
-    # Use the completed EOD session date, never the workflow execution date.
+    # Use completed EOD session date, never workflow execution date.
     signal_date=now.date().isoformat()
     eod_file=ROOT/"TOP5_V2_TODAY.csv"
     if eod_file.exists():
@@ -57,37 +57,38 @@ def capture():
         except Exception as ex:
             print(f"EOD signal date fallback to workflow date: {ex}")
 
-    # V2: only actual green BUY signal, never orange WAIT.
+    # V2: capture EVERY displayed eligible candidate and freeze its original action label.
     import ai_decision_top5 as v2
     candidates, signal_eod=v2.build_decision()
-    for c in candidates:
-        if not v2.is_eligible_candidate(c): continue
-        if c.get("action")!="🟢 ĐỦ ĐIỀU KIỆN THEO DÕI MUA": continue
+    for x in candidates:
+        if not v2.is_eligible_candidate(x): continue
+        action=str(x.get("action") or "").strip()
+        if not action: continue
         rows.append({
             "signal_date":signal_date,"signal_time":now.strftime("%Y-%m-%d %H:%M:%S"),
             "bot":"CỔ PHIẾU ĐẠT CHUẨN GPT","strategy_version":"V2_FROZEN_DECISION_2026-10-24",
-            "symbol":c["symbol"],"entry_price":c["close"],"buy_low":c["buy_low"],"buy_high":c["buy_high"],
-            "stop":c["stop"],"target1":c["target1"],"target2":c["target2"],"rr1":c["current_rr1"],
-            "score":c["decision_score"],"status":"BUY"
+            "symbol":x["symbol"],"entry_price":x["close"],"buy_low":x["buy_low"],"buy_high":x["buy_high"],
+            "stop":x["stop"],"target1":x["target1"],"target2":x["target2"],"rr1":x["current_rr1"],
+            "score":x["decision_score"],"status":action
         })
 
-    # V3: only actual green CANH MUA at EOD price.
+    # V3.7: capture EVERY Quality-Gate candidate and freeze its Decision-Gate label.
     import send_top5_advanced_v3_7_telegram as v3tg
     p=ROOT/"TOP5_ADVANCED_V3.csv"
     if p.exists():
         d=pd.read_csv(p)
         for _,x in d.iterrows():
-            if v3tg.action_label(x,False)!="🟢 ĐỦ ĐIỀU KIỆN MUA": continue
+            action=v3tg.action_label(x,False)
             rows.append({
                 "signal_date":signal_date,"signal_time":now.strftime("%Y-%m-%d %H:%M:%S"),
                 "bot":"CỔ PHIẾU CHẤT LƯỢNG GPT","strategy_version":"V3_7_GATE_2026-10-24",
                 "symbol":str(x.symbol).upper(),"entry_price":x.close,"buy_low":x.buy_low,"buy_high":x.buy_high,
                 "stop":x.stop,"target1":x.target1,"target2":x.target2,"rr1":x.rr1,
-                "score":x.advanced_score,"status":"BUY"
+                "score":x.advanced_score,"status":action
             })
 
     added,total=save_signals(rows)
-    print(f"FORWARD CAPTURE: {added} BUY signals seen | ledger total {total}")
+    print(f"FORWARD CAPTURE: {added} displayed candidates seen | ledger total {total}")
 
 def fetch_history(symbol,start,end):
     d=kbs_client.lich_su_gia(symbol,start,end)
@@ -200,6 +201,7 @@ def build_excel(sig,res):
 
         row={
             "Bot":bot_map.get(str(s["bot"]),str(s["bot"])),
+            "Nhãn tại T0":str(s.get("status") or ""),
             "Ngày tín hiệu (T0)":sd,
             "Mã":symbol,
             "Giá tín hiệu":entry,
@@ -261,7 +263,7 @@ def build_excel(sig,res):
         details.append(row)
 
     detail=pd.DataFrame(details)
-    base_cols=["Bot","Ngày tín hiệu (T0)","Mã","Giá tín hiệu","Vùng mua thấp","Vùng mua cao",
+    base_cols=["Bot","Nhãn tại T0","Ngày tín hiệu (T0)","Mã","Giá tín hiệu","Vùng mua thấp","Vùng mua cao",
                "Target 1","Target 2","Cắt lỗ","Điểm","R:R"]+[f"T{i}" for i in range(0,HORIZON+1)]+[
                "Hiện tại %","Cao nhất %","Thấp nhất %","VN-Index cùng kỳ %","Hơn VN-Index %",
                "Kế hoạch bot","Trạng thái"]
@@ -315,7 +317,7 @@ def build_excel(sig,res):
     ws=wb["Tổng hợp"]
     ws.insert_rows(1,amount=0)
     ws["A1"]=f"BÁO CÁO FORWARD TEST - CHỨNG KHOÁN GPT – {datetime.now(VN).strftime('%H:%M %d/%m/%Y')}"
-    ws["A2"]="Chỉ ghi nhận tín hiệu XANH MUA. Ngày phát tín hiệu = T0; phiên giao dịch kế tiếp = T1; theo dõi đến T20. Dữ liệu/logic hoàn toàn của GPT."
+    ws["A2"]="Ghi nhận TOÀN BỘ danh sách bot công bố và đóng băng nhãn tại T0 (MUA/CHỜ...). T0 là ngày tín hiệu; phiên kế tiếp = T1; theo dõi đến T20."
     ws["A4"]="1. TỔNG QUAN"
     ws["A11"]="2. LÃI/LỖ TRUNG BÌNH THEO TỪNG PHIÊN SAU TÍN HIỆU"
     ws.merge_cells("A1:K1"); ws.merge_cells("A2:K2"); ws.merge_cells("A4:K4"); ws.merge_cells("A11:K11")
