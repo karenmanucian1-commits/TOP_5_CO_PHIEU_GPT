@@ -127,13 +127,13 @@ def main():
 
     now = datetime.now(VN_TZ)
     header = (
-        "🧠 CỔ PHIẾU ĐỦ ĐIỀU KIỆN — FROZEN V2\n"
-        "🔒 Danh sách đủ điều kiện: EOD hoàn chỉnh\n"
+        "🤖 CỔ PHIẾU ĐẠT CHUẨN GPT\n"
+        "🔒 Danh sách đạt chuẩn: EOD hoàn chỉnh\n"
         "💹 Giá/R:R thực thi: KBS realtime\n"
         f"🕒 Quote: {now.strftime('%H:%M %d/%m/%Y')}"
     )
     message = message.replace(
-        "🧠 CỔ PHIẾU ĐỦ ĐIỀU KIỆN — FROZEN V2",
+        "🤖 CỔ PHIẾU ĐẠT CHUẨN GPT",
         header,
         1,
     )
