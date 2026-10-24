@@ -26,7 +26,7 @@ jobs:
           restore-keys: |
             stock-cache-
       - name: Seed only if cache unavailable
-        if: steps.stock-cache.outputs.cache-matched-key == ''
+        if: ${{ steps.stock-cache.outputs['cache-matched-key'] == '' }}
         run: |
           rm -rf stock_cache
           mkdir stock_cache
