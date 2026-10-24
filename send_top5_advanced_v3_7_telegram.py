@@ -10,20 +10,49 @@ def f(x,n=2):
     except:return "-"
 
 def action_label(x, realtime=False):
-    price=float(x.get("current_price",x.get("close")))
-    low=float(x.get("buy_low"))
-    high=float(x.get("buy_high"))
-    rr=float(x.get("current_rr1",x.get("rr1")))
+    """Unified execution meaning with V2.
 
-    # V3.7 Quality Gate already guarantees the stock itself is qualified.
-    # This layer only tells the user whether the CURRENT PRICE is executable.
+    GREEN means the stock is qualified AND the current entry is executable.
+    Passing the V3.7 Quality Gate alone is never enough to produce GREEN.
+    """
+    def num(name, fallback=None, default=float("nan")):
+        try:
+            v=x.get(name, x.get(fallback) if fallback else default)
+            return float(v)
+        except Exception:
+            return default
+
+    price=num("current_price","close")
+    low=num("buy_low")
+    high=num("buy_high")
+    stop=num("stop")
+    target1=num("target1")
+    rr=num("current_rr1","rr1",0.0)
+    momentum=num("momentum_score",default=50.0)   # RSI14 in Technical V3
+    flow=num("money_flow_score",default=0.0)
+    liquidity=num("liquidity_score",default=0.0)
+
+    # Invalidated / already reached target: no new entry.
+    if price <= stop:
+        return "🔴 KHÔNG MUA - ĐÃ THỦNG STOP"
+    if price >= target1:
+        return "🔴 KHÔNG MUA - ĐÃ ĐẠT TARGET 1"
+
+    # Same interpretation as V2: qualified stock, but entry is not ready.
     if price < low:
-        return "🟠 CHỜ GIÁ ỔN ĐỊNH/VỀ BUY ZONE"
-    if price > high:
-        return "🟠 CHỜ GIÁ VỀ BUY ZONE"
-    if rr < 1.20:
+        return "🟠 CHỜ GIÁ ỔN ĐỊNH/VỀ VÙNG MUA"
+    if price > high * 1.002:
+        return "🟠 CHỜ GIÁ VỀ VÙNG MUA"
+    if rr < 1.30:
         return "🟠 CHỜ ĐIỂM VÀO TỐT HƠN"
-    return "🟢 CANH MUA"
+    if momentum >= 75:
+        return "🟠 CHỜ HẠ NHIỆT RSI"
+    if flow < 50:
+        return "🟠 CHỜ DÒNG TIỀN XÁC NHẬN"
+    if liquidity < 30:
+        return "🟠 CHỜ THANH KHOẢN XÁC NHẬN"
+
+    return "🟢 ĐỦ ĐIỀU KIỆN MUA"
 
 def build(mode):
     realtime=mode=="midday"
@@ -52,7 +81,7 @@ def build(mode):
     if realtime:
         buy_now=[]
         for _,x in d.iterrows():
-            if action_label(x,True)=="🟢 CANH MUA":
+            if action_label(x,True)=="🟢 ĐỦ ĐIỀU KIỆN MUA":
                 buy_now.append(str(x.symbol))
         if buy_now:
             lines += ["━━━━━━━━━━━━━━━━━━━━", "🟢 CÒN MUA ĐƯỢC NGAY: "+", ".join(buy_now)]
