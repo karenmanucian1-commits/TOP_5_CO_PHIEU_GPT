@@ -270,7 +270,7 @@ def build_excel(sig,res):
     if detail.empty: detail=pd.DataFrame(columns=base_cols)
     else: detail=detail.reindex(columns=base_cols)
 
-    # Management summary by bot.
+    # Management summary by bot + action label.
     summary=[]
     for bot_full in bot_map.values():
         q=detail[detail["Bot"]==bot_full].copy()
@@ -280,34 +280,51 @@ def build_excel(sig,res):
         hit=int((q["Kế hoạch bot"]=="Chạm chốt lời").sum()) if total else 0
         stopn=int((q["Kế hoạch bot"]=="Dính cắt lỗ").sum()) if total else 0
         summary.append({
-            "Bot":bot_full,"Tổng lệnh":total,"Đang theo dõi":tracking,"Đủ 20 phiên":complete,
+            "Bot":bot_full,"Tổng mã":total,"Đang theo dõi":tracking,"Đủ 20 phiên":complete,
             "Lãi/lỗ hiện tại TB %":q["Hiện tại %"].mean() if total else 0,
-            "% lệnh đang lãi":q["Hiện tại %"].gt(0).mean()*100 if total else 0,
+            "% mã đang lãi":q["Hiện tại %"].gt(0).mean()*100 if total else 0,
             "VNI cùng kỳ TB %":q["VN-Index cùng kỳ %"].mean() if total else float("nan"),
             "Hơn VNI TB %":q["Hơn VN-Index %"].mean() if total else float("nan"),
             "Chạm chốt lời":hit,"Dính cắt lỗ":stopn,"Chưa chạm":total-hit-stopn,
         })
     summary_df=pd.DataFrame(summary)
 
-    # T0..T20 average performance table.
+    # Separate BUY vs WAIT so Decision Gate can be audited without mixing populations.
+    label_rows=[]
+    for bot_full in bot_map.values():
+        q=detail[detail["Bot"]==bot_full].copy()
+        for label_group,mask in [
+            ("ĐỦ ĐIỀU KIỆN MUA",q["Nhãn tại T0"].astype(str).str.contains("ĐỦ ĐIỀU KIỆN",case=False,na=False)),
+            ("THEO DÕI / CHỜ",~q["Nhãn tại T0"].astype(str).str.contains("ĐỦ ĐIỀU KIỆN",case=False,na=False)),
+        ]:
+            z=q[mask].copy()
+            label_rows.append({
+                "Bot":bot_full,"Nhóm nhãn T0":label_group,"Số mã":len(z),
+                "Lãi/lỗ hiện tại TB %":z["Hiện tại %"].mean() if len(z) else float("nan"),
+                "% mã đang lãi":z["Hiện tại %"].gt(0).mean()*100 if len(z) else float("nan"),
+                "Hơn VNI TB %":z["Hơn VN-Index %"].mean() if len(z) else float("nan"),
+            })
+    label_df=pd.DataFrame(label_rows)
+
+    # T0..T20 average performance table, directly comparable V2 vs V3.7.
     perf=[]
     bots=list(bot_map.values())
     for t in range(0,HORIZON+1):
         rr={"Phiên":f"T{t}"}
-        for idx,bot_full in enumerate(bots,1):
+        for name,bot_full in [("V2",bots[0]),("V3.7",bots[1])]:
             q=detail[detail["Bot"]==bot_full].copy()
             vals=pd.to_numeric(q[f"T{t}"],errors="coerce").dropna() if not q.empty else pd.Series(dtype=float)
-            # Alpha uses current benchmark only when available; for T tables leave blank if no aligned benchmark.
-            rr[f"Bot {idx} số lệnh"]=len(vals)
-            rr[f"Bot {idx} lãi TB %"]=vals.mean() if len(vals) else float("nan")
-            rr[f"Bot {idx} % lệnh lãi"]=vals.gt(0).mean()*100 if len(vals) else float("nan")
+            rr[f"{name} số mã"]=len(vals)
+            rr[f"{name} lãi TB %"]=vals.mean() if len(vals) else float("nan")
+            rr[f"{name} % mã lãi"]=vals.gt(0).mean()*100 if len(vals) else float("nan")
         perf.append(rr)
     perf_df=pd.DataFrame(perf)
 
-    # Write raw workbook first.
+    # Write workbook with fixed, non-overlapping summary ranges.
     with pd.ExcelWriter(out,engine="openpyxl") as xw:
         summary_df.to_excel(xw,index=False,sheet_name="Tổng hợp",startrow=4)
-        perf_df.to_excel(xw,index=False,sheet_name="Tổng hợp",startrow=11)
+        label_df.to_excel(xw,index=False,sheet_name="Tổng hợp",startrow=10)
+        perf_df.to_excel(xw,index=False,sheet_name="Tổng hợp",startrow=17)
         detail.to_excel(xw,index=False,sheet_name="Chi tiết từng mã")
         detail[detail["Bot"]==bots[0]].to_excel(xw,index=False,sheet_name="Chi tiết V2")
         detail[detail["Bot"]==bots[1]].to_excel(xw,index=False,sheet_name="Chi tiết V3.7")
@@ -345,10 +362,10 @@ def build_excel(sig,res):
                 if cell.value is not None: maxlen=max(maxlen,len(str(cell.value)))
             sh.column_dimensions[letter].width=min(max(maxlen+2,10),28)
 
-    for rownum in (5,12):
+    for rownum in (5,11,18):
         for cell in ws[rownum]:
             cell.font=Font(bold=True); cell.fill=header_fill; cell.border=Border(bottom=thin)
-    for rownum in (4,11):
+    for rownum in (4,10,17):
         ws.cell(rownum,1).fill=section_fill
 
     # Percentage display for report percentage columns.
