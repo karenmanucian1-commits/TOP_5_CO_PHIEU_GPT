@@ -103,9 +103,10 @@ jobs:
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python daily_scanner_v2.py
 
-      - name: Update forward tracking
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
-        run: python evaluate_top5_forward.py
+      # Legacy TOP5 forward evaluator disabled.
+      # Scanner now emits a 30-stock candidate pool, so the old evaluator no longer
+      # represents final eligible buy signals. A new T+5/T+10/T+20 forward test
+      # will be added separately after both final decision layers are stable.
 
       - name: Send TOP 5 to Telegram
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
