@@ -84,16 +84,19 @@ def main():
         default="CHO-RR<1.20"
     )
 
-    out=d[d.realtime_buy].sort_values("advanced_score",ascending=False).copy()
+    # Keep EVERY EOD Quality-Gate stock for the midday decision layer.
+    # Do not pre-filter orange/red names here: a qualified stock must remain visible
+    # so Telegram can explain whether it is BUY / WAIT / NO BUY at the current price.
+    out=d.sort_values("advanced_score",ascending=False).copy()
     d.to_csv(ROOT/"ADVANCED_V3_REALTIME_CHECK.csv",index=False,encoding="utf-8-sig")
     out.to_csv(ROOT/"TOP5_ADVANCED_V3_REALTIME.csv",index=False,encoding="utf-8-sig")
 
     print("\n=== V3.6.2 REALTIME CHECK |",datetime.now().strftime("%d/%m/%Y %H:%M:%S"),"===",flush=True)
     cols=["symbol","eod_close","current_price","buy_low","buy_high","stop","target1","current_rr1","realtime_action"]
     print(d[cols].to_string(index=False),flush=True)
-    print("\n=> CON DANG MUA:",len(out),"/",len(d),flush=True)
-    if len(out): print("=>",", ".join(out.symbol.astype(str)),flush=True)
-    else: print("=> KHONG CO MA NAO CON DU CHUAN MUA",flush=True)
+    buy_count=int(d["realtime_buy"].sum())
+    print("\n=> DAT GATE EOD:",len(out),"| QUA BO LOC REALTIME CU:",buy_count,flush=True)
+    print("=> GIU TOAN BO MA DAT QUALITY GATE DE DECISION LAYER PHAN LOAI.",flush=True)
     return out
 
 if __name__=="__main__": main()
