@@ -430,11 +430,14 @@ def verify_excel(path, expected_sig):
     from openpyxl import load_workbook
     wb=load_workbook(path,data_only=True)
     ws=wb["Tổng hợp"]
-    buy_sig=expected_sig[expected_sig["status"].map(is_buy_label)].copy()
-    expected={
-        "V2 - CỔ PHIẾU ĐẠT CHUẨN GPT": int((buy_sig["bot"].astype(str)=="CỔ PHIẾU ĐẠT CHUẨN GPT").sum()),
-        "V3.7 - CỔ PHIẾU CHẤT LƯỢNG GPT": int((buy_sig["bot"].astype(str)=="CỔ PHIẾU CHẤT LƯỢNG GPT").sum()),
-    }
+    # Summary counts only BUY trades that already have a valid T0/buy price.
+    # Signals waiting for the next tradable T0 remain in Detail and must not inflate Summary.
+    expected={}
+    for bot_short,bot_full in [
+        ("V2 - CỔ PHIẾU ĐẠT CHUẨN GPT","CỔ PHIẾU ĐẠT CHUẨN GPT"),
+        ("V3.7 - CỔ PHIẾU CHẤT LƯỢNG GPT","CỔ PHIẾU CHẤT LƯỢNG GPT"),
+    ]:
+        expected[bot_short]=int(((detail["Bot"]==bot_full) & (detail["Nhãn tại T0"]==BUY_LABEL) & detail["Giá mua"].notna()).sum())
     actual={}
     for r in range(6,8):
         name=ws.cell(r,1).value
