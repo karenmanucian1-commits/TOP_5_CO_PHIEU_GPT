@@ -1132,19 +1132,19 @@ def main():
     if df.empty:
         raise RuntimeError("Khong co du lieu TOP5.")
 
+    # PRO analysis remains available for the Decision Layer,
+    # but no longer sends the raw TOP5/ranking to Telegram.
+    # Telegram output is sent only by ai_decision_top5.py after filtering.
     messages = build_messages(df, signal_date)
-    token, chat_id = load_config()
 
     for i, message in enumerate(messages, 1):
         print()
-        print(f"--- MESSAGE {i}/{len(messages)} ---")
+        print(f"--- PRO ANALYSIS {i}/{len(messages)} (LOG ONLY) ---")
         print(message)
-        # Each message is deliberately small, avoiding Telegram's long-message limit.
-        send_telegram(token, chat_id, message)
 
     print()
     print("=" * 65)
-    print(f"GUI TELEGRAM THANH CONG - {len(messages)} TIN NHAN")
+    print("PRO ANALYSIS OK - TELEGRAM DEFERRED TO DECISION FILTER")
     print("=" * 65)
 
 
