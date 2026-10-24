@@ -586,7 +586,7 @@ def build_message(candidates, signal_date):
     eligible = [c for c in candidates if is_eligible_candidate(c)]
 
     lines = [
-        "🧠 CỔ PHIẾU ĐỦ ĐIỀU KIỆN — FROZEN V2",
+        "🤖 CỔ PHIẾU ĐẠT CHUẨN GPT",
         "",
         f"📅 Dữ liệu: {signal_date.strftime('%d/%m/%Y')}",
         f"🕒 Đánh giá lúc: {now.strftime('%H:%M %d/%m/%Y')}",
@@ -600,7 +600,7 @@ def build_message(candidates, signal_date):
             "",
             "Các mã bị kết luận KHÔNG MUA / không đạt chuẩn đã được loại khỏi bản tin.",
             "",
-            "ℹ️ Frozen V2 và Decision Layer vẫn tính toán như cũ; chỉ thay đổi phần hiển thị Telegram.",
+            "ℹ️ Hệ thống chấm điểm và điều kiện lọc không thay đổi.",
         ]
         return "\n".join(lines)
 
@@ -635,7 +635,7 @@ def build_message(candidates, signal_date):
 
     lines += [
         "📌 Chỉ hiển thị mã còn đủ điều kiện; các mã KHÔNG MUA đã được bỏ.",
-        "ℹ️ Frozen V2 không thay đổi và hệ thống không tự đặt lệnh.",
+        "ℹ️ Hệ thống không tự đặt lệnh.",
     ]
     return "\n".join(lines)
 
