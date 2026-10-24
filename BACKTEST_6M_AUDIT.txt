@@ -1,0 +1,10 @@
+ISOLATED 6M BACKTEST
+Period: 2026-04-24 -> 2026-10-23
+Production bot files modified by this engine: NO
+Entry: next trading session Open (EOD replay).
+Fee: 0.4%.
+Exit event from T2: Close < Stop checked BEFORE High >= T1. Stop executes next session Open; T1 executes at T1.
+Dedup: same model+symbol blocked for 20 sessions after accepted signal.
+Finance point-in-time: actual publication date where present; +45d quarter fallback.
+Important limitation: historical 11:35 intraday prices are not present in repository, therefore this methodology run replays EOD/morning signals only; it does not fabricate midday prices.
+Recent signals without enough future bars remain NaN for T5/T10/T20 rather than being fabricated.
