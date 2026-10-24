@@ -407,6 +407,7 @@ def evaluate_candidate(ai_rank, setup_rank, row, a):
 
         "in_buy_zone": in_buy_zone,
         "above_buy_zone": above_buy_zone,
+        "below_buy_zone": below_buy_zone,
         "hard_no_buy": hard_no_buy,
 
         "reasons": reasons,
