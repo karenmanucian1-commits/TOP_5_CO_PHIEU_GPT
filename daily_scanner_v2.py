@@ -14,7 +14,8 @@ DATA_FILE = BASE_DIR / "scanner_dataset_v2.csv"
 MODEL_FILE = BASE_DIR / "TOP5_V2_FROZEN_MODEL.joblib"
 OUTPUT_FILE = BASE_DIR / "TOP5_V2_TODAY.csv"
 HISTORY_FILE = BASE_DIR / "TOP5_V2_HISTORY.csv"
-# Wide Frozen-V2 shortlist. Final output is NOT limited to a Top N.\nCANDIDATE_POOL_N = 30
+# Wide Frozen-V2 shortlist. Final output is NOT limited to a Top N.
+CANDIDATE_POOL_N = 30
 
 # 14 FEATURES V1
 V1_FEATURES = [
