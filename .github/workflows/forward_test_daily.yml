@@ -1,4 +1,4 @@
-name: Forward Test - Chứng Khoán GPT\n# validation trigger 2
+name: Forward Test - Chứng Khoán GPT
 
 on:
   workflow_dispatch:
