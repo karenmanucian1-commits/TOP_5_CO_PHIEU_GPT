@@ -97,7 +97,7 @@ def evaluate():
         # enough calendar room for 20 trading sessions; KBS returns only trading bars
         hist=fetch_history(str(s.symbol),sd.isoformat(),today.isoformat())
         if hist.empty: continue
-        hist=hist[hist["time"]>=sd].copy().head(HORIZON)
+        hist=hist[hist["time"]>sd].copy().head(HORIZON)
         entry=fnum(s.entry_price); stop=fnum(s.stop); t1=fnum(s.target1); t2=fnum(s.target2)
         if not math.isfinite(entry) or entry<=0: continue
         first_event=""
@@ -137,37 +137,13 @@ def pct(v):
     except:return "-"
 
 def build_report(sig,res):
+    """Short Telegram notification only. Detailed data stays in CSV/Drive report."""
     now=datetime.now(VN)
-    lines=["📊 FORWARD TEST — KIỂM ĐỊNH PHÍM MUA",now.strftime("🕕 %H:%M %d/%m/%Y"),
-           "🔒 Tín hiệu đã khóa tại thời điểm bot phím mua | T1→T20 là các phiên giao dịch sau tín hiệu",""]
-    if sig.empty:
-        return "\n".join(lines+["Chưa có tín hiệu 🟢 mua nào để kiểm định."])
-    active=0
-    for bot in ["CỔ PHIẾU ĐẠT CHUẨN GPT","CỔ PHIẾU CHẤT LƯỢNG GPT"]:
-        sb=sig[sig.bot==bot]
-        if sb.empty: continue
-        lines += ["━━━━━━━━━━━━━━━━━━━━",("🤖 " if "ĐẠT CHUẨN" in bot else "🚀 ")+bot]
-        for _,s in sb.sort_values(["signal_date","symbol"]).iterrows():
-            rr=res[(res.bot==bot)&(res.symbol.astype(str)==str(s.symbol))&(res.signal_date.astype(str)==str(s.signal_date))]
-            if rr.empty:
-                lines.append(f"• {s.symbol} | Phím {fnum(s.entry_price):.2f} | đang chờ T1")
-                continue
-            x=rr.sort_values("t").iloc[-1]; active+=1
-            event=str(x.first_event) if pd.notna(x.first_event) and str(x.first_event) else "Chưa chạm Stop/Target"
-            lines.append(f"• {s.symbol} | {s.signal_date} | Phím {fnum(s.entry_price):.2f}")
-            lines.append(f"  T{int(x.t)}: {fnum(x.close):.2f} | {pct(x.return_pct)} | {money(x.pnl_100m_vnd)}/100tr")
-            lines.append(f"  MFE {pct(x.mfe_pct)} | MAE {pct(x.mae_pct)} | {event}")
-        latest=[]
-        for _,s in sb.iterrows():
-            rr=res[(res.bot==bot)&(res.symbol.astype(str)==str(s.symbol))&(res.signal_date.astype(str)==str(s.signal_date))]
-            if not rr.empty: latest.append(rr.sort_values("t").iloc[-1])
-        if latest:
-            q=pd.DataFrame(latest)
-            win=(q.return_pct>0).mean()*100
-            lines += [f"📈 Đang theo dõi: {len(q)} tín hiệu | Win hiện tại {win:.1f}% | Lãi/lỗ TB {pct(q.return_pct.mean())}",""]
-    lines += ["━━━━━━━━━━━━━━━━━━━━","💰 Quy đổi 100 triệu/mã chỉ để dễ hình dung; % lãi/lỗ là chỉ số kiểm định chính.",
-              "📌 Chưa trừ phí/thuế trong bản V1; sẽ giữ cùng một quy tắc cho toàn bộ mẫu để so sánh công bằng."]
-    return "\n".join(lines)
+    return "\n".join([
+        "📊 FORWARD TEST - CHỨNG KHOÁN GPT",
+        f"✅ Đã cập nhật báo cáo kiểm định ngày {now.strftime('%d/%m/%Y')}.",
+        "📁 Báo cáo chi tiết đã được cập nhật trên Google Drive."
+    ])
 
 def send(msg):
     token=(os.getenv("BOT_TOKEN") or "").strip(); chat=(os.getenv("CHAT_ID") or "").strip()
