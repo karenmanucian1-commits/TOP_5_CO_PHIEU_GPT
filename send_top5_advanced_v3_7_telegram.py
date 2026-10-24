@@ -68,9 +68,40 @@ def build(mode):
         price=x.get("current_price",x.get("close"))
         rr=x.get("current_rr1",x.get("rr1"))
         action=action_label(x,realtime)
+        reason=""
+        try:
+            price_num=float(price)
+            low_num=float(x.buy_low)
+            high_num=float(x.buy_high)
+            rr_num=float(rr)
+            momentum=float(x.get("momentum_score",50.0))
+            flow=float(x.get("money_flow_score",0.0))
+            liquidity=float(x.get("liquidity_score",0.0))
+            stop_num=float(x.stop)
+            target1_num=float(x.target1)
+            if price_num <= stop_num:
+                reason=f"↳ Lý do: Giá {f(price_num)} ≤ Stop {f(stop_num)}"
+            elif price_num >= target1_num:
+                reason=f"↳ Lý do: Giá {f(price_num)} ≥ T1 {f(target1_num)}"
+            elif price_num < low_num:
+                reason=f"↳ Lý do: Giá {f(price_num)} < Buy Low {f(low_num)}"
+            elif price_num > high_num*1.002:
+                reason=f"↳ Lý do: Giá {f(price_num)} > Buy High {f(high_num)} × 1.002"
+            elif rr_num < 1.30:
+                reason=f"↳ Lý do: R:R {rr_num:.2f} < 1.30"
+            elif momentum >= 75:
+                reason=f"↳ Lý do: RSI {momentum:.1f} ≥ 75"
+            elif flow < 50:
+                reason=f"↳ Lý do: Flow {flow:.0f} < 50"
+            elif liquidity < 30:
+                reason=f"↳ Lý do: Liquidity score {liquidity:.0f} < 30"
+        except Exception:
+            reason=""
+
         lines += [
           f"📌 {x.symbol} | ⭐ {f(x.advanced_score,1)}",
           f"⚡ Hành động: {action}",
+          *([reason] if reason else []),
           f"💵 Giá: {f(price)} | Buy: {f(x.buy_low)} – {f(x.buy_high)}",
           f"🛑 Stop: {f(x.stop)}",
           f"🎯 T1: {f(x.target1)} | 🚀 T2: {f(x.target2)}",
