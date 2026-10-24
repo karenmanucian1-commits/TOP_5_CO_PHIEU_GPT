@@ -2,7 +2,7 @@
 from pathlib import Path
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
-import os, sys, math, urllib.parse, urllib.request, ssl
+import os, sys, math, urllib.parse, urllib.request, ssl, json, base64
 import certifi
 import pandas as pd
 import kbs_client
@@ -154,8 +154,45 @@ def send(msg):
     with urllib.request.urlopen(req,timeout=30,context=ssl.create_default_context(cafile=certifi.where())) as r:
         r.read()
 
+def build_excel(sig,res):
+    out=ROOT/"FORWARD_TEST_CHUNG_KHOAN_GPT.xlsx"
+    latest=pd.DataFrame()
+    if not res.empty:
+        latest=(res.sort_values("t").groupby(["signal_date","bot","strategy_version","symbol"],as_index=False).tail(1).copy())
+    summary=[]
+    for bot in ["CỔ PHIẾU ĐẠT CHUẨN GPT","CỔ PHIẾU CHẤT LƯỢNG GPT"]:
+        q=latest[latest["bot"]==bot] if not latest.empty else pd.DataFrame()
+        summary.append({
+            "Bot":bot,"Số tín hiệu":len(q),
+            "Win rate %":(q["return_pct"].gt(0).mean()*100 if len(q) else 0),
+            "Lãi/lỗ TB %":(q["return_pct"].mean() if len(q) else 0),
+            "Tổng P/L giả định 100tr/mã":(q["pnl_100m_vnd"].sum() if len(q) else 0)
+        })
+    with pd.ExcelWriter(out,engine="openpyxl") as xw:
+        pd.DataFrame(summary).to_excel(xw,index=False,sheet_name="TONG_QUAN")
+        sig.to_excel(xw,index=False,sheet_name="TIN_HIEU_MUA")
+        res.to_excel(xw,index=False,sheet_name="T1_T20_RAW")
+        if not res.empty:
+            wide=res.pivot_table(index=["signal_date","bot","symbol","entry_price"],columns="t",values=["close","return_pct"],aggfunc="last")
+            wide.columns=[f"{a}_T{int(b)}" for a,b in wide.columns]
+            wide.reset_index().to_excel(xw,index=False,sheet_name="T1_T20")
+    return out
+
+def upload_drive(path):
+    url=(os.getenv("GDRIVE_WEBHOOK") or "").strip()
+    if not url: raise RuntimeError("Thieu GDRIVE_WEBHOOK")
+    payload=json.dumps({"name":path.name,"data":base64.b64encode(path.read_bytes()).decode("ascii")}).encode("utf-8")
+    req=urllib.request.Request(url,data=payload,headers={"Content-Type":"application/json"},method="POST")
+    with urllib.request.urlopen(req,timeout=60,context=ssl.create_default_context(cafile=certifi.where())) as r:
+        ans=r.read().decode("utf-8","replace").strip()
+    if not ans.startswith("OK "): raise RuntimeError("Google Drive upload failed: "+ans)
+    print(ans)
+    return ans
+
 def report():
     sig,res=evaluate()
+    xlsx=build_excel(sig,res)
+    upload_drive(xlsx)
     send(build_report(sig,res))
 
 if __name__=="__main__":
