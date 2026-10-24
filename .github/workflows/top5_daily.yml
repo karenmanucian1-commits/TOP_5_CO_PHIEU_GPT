@@ -142,7 +142,7 @@ jobs:
       # =========================================================
 
       - name: Save TOP5 history to repository
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }} && success()
+        if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5')) && success() }}
         run: |
           git config user.name "TOP5 AI Bot"
           git config user.email "top5-ai-bot@users.noreply.github.com"
