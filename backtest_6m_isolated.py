@@ -200,7 +200,7 @@ def main():
         for i,(row,a) in enumerate(records):
             c=dec.evaluate_candidate(i+1,ranks[i],row,a)
             if c.get("action")=="🟢 ĐỦ ĐIỀU KIỆN MUA":
-                trades.append(dict(model="V2",signal_date=day,symbol=c["symbol"],stop=float(c["stop_loss"]),target1=float(c["target1"])))
+                trades.append(dict(model="V2",signal_date=day,symbol=c["symbol"],stop=float(c["stop"]),target1=float(c["target1"])))
     # V3.7 point-in-time
     fin,fin_source=financial_raw(); fg={s:g for s,g in fin.groupby("symbol")}
     tech=technical_panel(raw)
