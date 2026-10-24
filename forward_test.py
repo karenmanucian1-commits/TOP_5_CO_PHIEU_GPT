@@ -462,10 +462,13 @@ def verify_excel(path, expected_sig):
         "CỔ PHIẾU CHẤT LƯỢNG GPT":"V3.7 - CỔ PHIẾU CHẤT LƯỢNG GPT",
     }
     for r in range(2,detail_ws.max_row+1):
-        bot=detail_ws.cell(r,bot_col).value
+        bot=str(detail_ws.cell(r,bot_col).value or "")
         label=detail_ws.cell(r,label_col).value
-        if bot in bot_map and label==BUY_LABEL:
-            expected[bot_map[bot]]+=1
+        if label==BUY_LABEL:
+            for short_name,full_name in bot_map.items():
+                if bot==full_name or short_name in bot:
+                    expected[full_name]+=1
+                    break
     actual={}
     for r in range(6,8):
         name=ws.cell(r,1).value
