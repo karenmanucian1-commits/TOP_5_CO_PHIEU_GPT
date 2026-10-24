@@ -40,10 +40,12 @@ def main(mode=None):
     mode=(mode or (sys.argv[1] if len(sys.argv)>1 else "midday")).lower()
     msg=build(mode)
     print("\n"+msg,flush=True)
-    token=os.getenv("TELEGRAM_BOT_TOKEN","").strip()
-    chat=os.getenv("TELEGRAM_CHAT_ID","").strip()
+    # Production uses the SAME Telegram secrets as Frozen V2.
+    # Legacy V3 names remain as local fallback only.
+    token=(os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
+    chat=(os.getenv("CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID") or "").strip()
     if not token or not chat:
-        print("\n[TELEGRAM] Thieu TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID -> khong gui.",flush=True)
+        print("\n[TELEGRAM] Thieu BOT_TOKEN/CHAT_ID -> khong gui.",flush=True)
         return
     u=f"https://api.telegram.org/bot{token}/sendMessage"
     res=requests.post(u,json={"chat_id":chat,"text":msg,"disable_web_page_preview":True},timeout=(5,15))
