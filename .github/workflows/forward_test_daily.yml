@@ -6,7 +6,7 @@ on:
     branches: [main]
     paths: [.github/workflows/forward_test_daily.yml]
   schedule:
-    # 18:00 Viet Nam (UTC+7), Monday-Friday — corrected Forward Test
+    # 18:00 Viet Nam (UTC+7), Monday-Friday — corrected Forward Test v2
     - cron: "0 11 * * 1-5"
 
 permissions:
