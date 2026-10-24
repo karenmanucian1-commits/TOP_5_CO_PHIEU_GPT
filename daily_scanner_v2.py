@@ -14,7 +14,7 @@ DATA_FILE = BASE_DIR / "scanner_dataset_v2.csv"
 MODEL_FILE = BASE_DIR / "TOP5_V2_FROZEN_MODEL.joblib"
 OUTPUT_FILE = BASE_DIR / "TOP5_V2_TODAY.csv"
 HISTORY_FILE = BASE_DIR / "TOP5_V2_HISTORY.csv"
-TOP_N = 5
+# Wide Frozen-V2 shortlist. Final output is NOT limited to a Top N.\nCANDIDATE_POOL_N = 30
 
 # 14 FEATURES V1
 V1_FEATURES = [
@@ -238,11 +238,8 @@ def main():
 
         today = today.loc[~all_missing].copy()
 
-    if len(today) < TOP_N:
-        raise RuntimeError(
-            f"Chi con {len(today)} ma hop le, "
-            f"khong du de chon Top {TOP_N}."
-        )
+    if today.empty:
+        raise RuntimeError("Khong con ma hop le de cham diem.")
 
     # --------------------------------------------------------
     # 4. SCORE
@@ -290,22 +287,19 @@ def main():
         f"removed {removed_filter:,}, remaining {len(today):,}"
     )
 
-    if len(today) < TOP_N:
-        raise RuntimeError(
-            f"Chi con {len(today)} ma sau Investability Filter, "
-            f"khong du de chon Top {TOP_N}."
-        )
+    if today.empty:
+        raise RuntimeError("Khong con ma hop le de cham diem.")
     # --------------------------------------------------------
-    # 5. TOP 5
-    # --------------------------------------------------------
-
+    # 5. WIDE CANDIDATE POOL
+    # Frozen score is unchanged. We keep a wider pool so Decision Layer
+    # can find every buy-worthy stock instead of stopping at the first 5.
     top = (
         today
         .sort_values(
             ["SCORE", "symbol"],
             ascending=[False, True]
         )
-        .head(TOP_N)
+        .head(CANDIDATE_POOL_N)
         .copy()
     )
 
@@ -428,7 +422,7 @@ def main():
 
     print()
     print("=" * 72)
-    print(f"TOP {TOP_N} - {latest_date.date()}")
+    print(f"FROZEN V2 CANDIDATE POOL {len(result)} - {latest_date.date()}")
     print("=" * 72)
 
     display_cols = [
