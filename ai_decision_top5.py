@@ -29,6 +29,9 @@ import send_top5_telegram_pro as pro
 # ============================================================
 
 MIN_SETUP_SCORE = 55.0
+# Stock-list eligibility: keep qualified setups from planned R:R >= 1.00.
+MIN_ELIGIBLE_RR1 = 1.00
+# Buy-now execution quality still requires current/planned R:R >= 1.30.
 MIN_RR1 = 1.30
 
 # Volume < 0.30x: không loại hoàn toàn, nhưng bắt buộc chờ xác nhận.
@@ -575,7 +578,7 @@ def is_eligible_candidate(c):
         return False
     if c["setup_score"] < MIN_SETUP_SCORE:
         return False
-    if c["rr1"] < MIN_RR1:
+    if c["rr1"] < MIN_ELIGIBLE_RR1:
         return False
     return True
 
