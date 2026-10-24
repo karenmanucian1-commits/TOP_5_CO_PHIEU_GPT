@@ -120,6 +120,25 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python ai_decision_top5.py
 
+      - name: Restore V2 morning EOD files for midday
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        id: v2-eod-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            TOP5_V2_TODAY.csv
+            scanner_dataset_v2.csv
+          key: v2-eod-files-${{ github.run_id }}
+          restore-keys: |
+            v2-eod-files-
+
+      - name: Verify V2 morning EOD files for midday
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        run: |
+          test -f TOP5_V2_TODAY.csv || { echo "ERROR: No V2 morning TOP5 cache found. Run morning once to seed midday."; exit 1; }
+          test -f scanner_dataset_v2.csv || { echo "ERROR: No completed EOD scanner dataset found."; exit 1; }
+          echo "V2 completed-EOD files restored for midday."
+
       - name: Midday Decision - keep morning Frozen V2 TOP5
         if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
         env:
@@ -129,6 +148,15 @@ jobs:
       # =========================================================
       # SAVE UPDATED CACHE
       # =========================================================
+
+      - name: Save V2 completed EOD files for midday
+        if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5')) && success() }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            TOP5_V2_TODAY.csv
+            scanner_dataset_v2.csv
+          key: v2-eod-files-${{ github.run_id }}
 
       - name: Save updated stock cache
         if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5')) && success() }}
