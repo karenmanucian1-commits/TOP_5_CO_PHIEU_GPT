@@ -9,7 +9,7 @@ from send_top5_advanced_v3_7_telegram import action_label
 
 ROOT=Path(__file__).resolve().parent
 START=pd.Timestamp("2026-04-24"); END=pd.Timestamp("2026-10-23")
-FEE=.004  # locked total round-trip cost
+FEE=.004  # locked total round-trip cost (0.4%)
 FEATURES=[
 "RET1","RET5","RET10","RET20","RET60","DIST_MA20","DIST_MA50","MA20_SLOPE5","MA50_SLOPE10","RSI14","VOL_RATIO","VOLATILITY20","RANGE_POS20","RANGE_POS60",
 "MKT_RET1","MKT_RET5","MKT_RET20","MKT_RET60","MKT_VOL20","BREADTH1","BREADTH5","BREADTH20","MKT_RET20_MA20","MKT_BREADTH20_MA20","MKT_VOL20_MA20","MKT_TREND_SCORE",
