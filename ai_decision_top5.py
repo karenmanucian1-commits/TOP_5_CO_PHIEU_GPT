@@ -366,7 +366,7 @@ def evaluate_candidate(ai_rank, setup_rank, row, a):
         if market_score < 45:
             action = "🟠 THEO DÕI MUA THĂM DÒ"
         else:
-            action = "🟢 ĐỦ ĐIỀU KIỆN THEO DÕI MUA"
+            action = "🟢 ĐỦ ĐIỀU KIỆN MUA"
 
     else:
         action = "🟠 THEO DÕI - CHƯA VỘI MUA"
@@ -621,12 +621,23 @@ def build_message(candidates, signal_date):
         elif c["volume"] < VERY_WEAK_VOLUME:
             status = "🟡 CHỜ DÒNG TIỀN XÁC NHẬN"
         elif c["in_buy_zone"]:
-            status = "🟢 ĐỦ ĐIỀU KIỆN THEO DÕI MUA"
+            status = "🟢 ĐỦ ĐIỀU KIỆN MUA"
         else:
             status = "🟠 THEO DÕI ĐIỂM VÀO"
 
+        wait_reason = ""
+        if c["above_buy_zone"]:
+            wait_reason = f"↳ Lý do: Giá {fmt_price(c['close'])} > Buy High {fmt_price(c['buy_high'])} × {BUY_ZONE_TOLERANCE:.3f}"
+        elif c["below_buy_zone"]:
+            wait_reason = f"↳ Lý do: Giá {fmt_price(c['close'])} < Buy Low {fmt_price(c['buy_low'])}"
+        elif c["in_buy_zone"] and c["current_rr1"] < MIN_RR1:
+            wait_reason = f"↳ Lý do: R:R hiện tại {c['current_rr1']:.2f} < {MIN_RR1:.2f}"
+        elif c["volume"] < VERY_WEAK_VOLUME:
+            wait_reason = f"↳ Lý do: KL phiên {c['volume']:.2f}x TB20 < {VERY_WEAK_VOLUME:.2f}x"
+
         lines += [
             f"📌 {c['symbol']} | {status}",
+            *([wait_reason] if wait_reason else []),
             f"💵 Giá: {fmt_price(c['close'])} | Buy: {fmt_price(c['buy_low'])} – {fmt_price(c['buy_high'])}",
             f"🛑 Stop: {fmt_price(c['stop'])}",
             f"🎯 T1: {fmt_price(c['target1'])} | 🚀 T2: {fmt_price(c['target2'])}",
