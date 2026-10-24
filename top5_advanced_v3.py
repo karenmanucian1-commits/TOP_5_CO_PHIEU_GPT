@@ -17,14 +17,9 @@ def main():
     m["advanced_score"]*=np.clip(m.coverage/80,.85,1)
     m["action"]=np.where(m.candidate_pass,"MUA/CHO DIEM VAO","KHONG MUA")
     passed=m[m.candidate_pass].sort_values("advanced_score",ascending=False)
-    # Max 2 names from BANK/SECURITIES/INSURANCE. Corporate is not treated as one real sector.
-    picked=[];cnt={}
-    for _,x in passed.iterrows():
-        g=x.sector_group;lim=2 if g in ["BANK","SECURITIES","INSURANCE"] else 5
-        if cnt.get(g,0)>=lim:continue
-        picked.append(x);cnt[g]=cnt.get(g,0)+1
-        if len(picked)>=5:break
-    top=pd.DataFrame(picked)
+    # User requirement: keep EVERY stock that passes the Quality Gate.
+    # No Top-5 cap and no sector-count cap at the output layer.
+    top=passed.copy()
     cols=["symbol","sector_group","action","advanced_score","financial_score","coverage","close",
           "buy_low","buy_high","stop","target1","target2","rr1","rr2","trend_score","rs_score",
           "money_flow_score","momentum_score","liquidity_score","avg_value20_bn","pe","pb"]
