@@ -30,7 +30,7 @@ def build(mode):
     p=ROOT/("TOP5_ADVANCED_V3_REALTIME.csv" if realtime else "TOP5_ADVANCED_V3.csv")
     if not p.exists(): raise RuntimeError("Thieu file ket qua: "+str(p))
     d=pd.read_csv(p)
-    title="🌅 CỔ PHIẾU ĐÁNG MUA GPT V3.7" if not realtime else "⚡ CỔ PHIẾU CÒN ĐÁNG MUA - REALTIME V3.7"
+    title="🚀 CỔ PHIẾU CHẤT LƯỢNG GPT" if not realtime else "🚀 CỔ PHIẾU CHẤT LƯỢNG GPT — REALTIME"
     lines=[title,datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("🕒 %d/%m/%Y %H:%M"),
            "✅ Đã qua Quality Gate — xem HÀNH ĐỘNG để biết điểm mua",""]
     if d.empty:
