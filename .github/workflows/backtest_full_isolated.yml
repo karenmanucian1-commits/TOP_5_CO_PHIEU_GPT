@@ -1,0 +1,38 @@
+name: Backtest Full Isolated
+on:
+  push:
+    paths:
+      - "backtest_full_isolated.py"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Restore stock data
+        run: |
+          rm -rf stock_cache && mkdir stock_cache
+          unzip -q stock_cache_seed.zip -d stock_cache
+      - run: python restore_financial_db.py
+      - run: python build_scanner_dataset_v2.py
+      - name: Full isolated replay
+        run: python backtest_full_isolated.py
+      - name: Persist isolated results
+        run: |
+          cp BACKTEST_6M_SUMMARY.csv BACKTEST_FULL_SUMMARY.csv
+          cp BACKTEST_6M_TRADES.csv BACKTEST_FULL_TRADES.csv
+          cp BACKTEST_6M_AUDIT.txt BACKTEST_FULL_AUDIT.txt
+          git config user.name "Backtest Bot"
+          git config user.email "backtest-bot@users.noreply.github.com"
+          git add BACKTEST_FULL_SUMMARY.csv BACKTEST_FULL_TRADES.csv BACKTEST_FULL_AUDIT.txt
+          git commit -m "Save full isolated backtest results" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
