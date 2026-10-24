@@ -290,19 +290,21 @@ def build_excel(sig,res,repeats=None):
     # Management summary by bot + action label.
     summary=[]
     for bot_full in bot_map.values():
-        q=detail[(detail["Bot"]==bot_full) & (detail["Nhãn tại T0"]==BUY_LABEL) & detail["Giá mua"].notna()].copy()
-        total=len(q)
-        complete=int(q["Trạng thái"].astype(str).str.startswith("Đủ").sum()) if total else 0
-        tracking=total-complete
-        hit=int((q["Kế hoạch bot"]=="Chạm chốt lời").sum()) if total else 0
-        stopn=int((q["Kế hoạch bot"]=="Dính cắt lỗ").sum()) if total else 0
+        buy_all=detail[(detail["Bot"]==bot_full) & (detail["Nhãn tại T0"]==BUY_LABEL)].copy()
+        q=buy_all[buy_all["Giá mua"].notna()].copy()
+        total=len(buy_all)
+        entered=len(q)
+        complete=int(q["Trạng thái"].astype(str).str.startswith("Đủ").sum()) if entered else 0
+        tracking=entered-complete
+        hit=int((q["Kế hoạch bot"]=="Chạm chốt lời").sum()) if entered else 0
+        stopn=int((q["Kế hoạch bot"]=="Dính cắt lỗ").sum()) if entered else 0
         summary.append({
             "Bot":bot_full,"Tổng lệnh MUA":total,"Đang theo dõi":tracking,"Đủ 20 phiên":complete,
-            "Lãi/lỗ hiện tại TB %":q["Hiện tại %"].mean() if total else 0,
-            "% mã đang lãi":q["Hiện tại %"].gt(0).mean()*100 if total else 0,
-            "VNI cùng kỳ TB %":q["VN-Index cùng kỳ %"].mean() if total else float("nan"),
-            "Hơn VNI TB %":q["Hơn VN-Index %"].mean() if total else float("nan"),
-            "Chạm chốt lời":hit,"Dính cắt lỗ":stopn,"Chưa chạm":total-hit-stopn,
+            "Lãi/lỗ hiện tại TB %":q["Hiện tại %"].mean() if entered else 0,
+            "% mã đang lãi":q["Hiện tại %"].gt(0).mean()*100 if entered else 0,
+            "VNI cùng kỳ TB %":q["VN-Index cùng kỳ %"].mean() if entered else float("nan"),
+            "Hơn VNI TB %":q["Hơn VN-Index %"].mean() if entered else float("nan"),
+            "Chạm chốt lời":hit,"Dính cắt lỗ":stopn,"Chưa chạm":entered-hit-stopn,
         })
     summary_df=pd.DataFrame(summary)
 
@@ -390,7 +392,7 @@ def build_excel(sig,res,repeats=None):
     section_fill=PatternFill("solid",fgColor="E2F0D9")
     for sname in wb.sheetnames:
         sh=wb[sname]
-        sh.freeze_panes="A2" if sname!="Tổng hợp" else "A6"
+        sh.freeze_panes="G2" if sname!="Tổng hợp" else "A6"
         sh.auto_filter.ref=sh.dimensions if sname!="Tổng hợp" else None
         for row in sh.iter_rows():
             for cell in row:
@@ -410,6 +412,22 @@ def build_excel(sig,res,repeats=None):
             cell.font=Font(bold=True); cell.fill=header_fill; cell.border=Border(bottom=thin)
     for rownum in (4,10,17):
         ws.cell(rownum,1).fill=section_fill
+
+    # Date display in detail sheets.
+    for sname in ["Chi tiết từng mã","Chi tiết V2","Chi tiết V3.7"]:
+        sh=wb[sname]
+        headers={c.value:c.column for c in sh[1]}
+        for h in ["Ngày tín hiệu","Ngày mua (T0)"]:
+            col=headers.get(h)
+            if col:
+                for r in range(2,sh.max_row+1):
+                    cell=sh.cell(r,col)
+                    if isinstance(cell.value,str) and cell.value:
+                        try:
+                            cell.value=pd.to_datetime(cell.value).to_pydatetime()
+                        except Exception:
+                            pass
+                    cell.number_format="dd/mm/yyyy"
 
     # Percentage display for report percentage columns.
     for sname in ["Chi tiết từng mã","Chi tiết V2","Chi tiết V3.7"]:
@@ -446,8 +464,7 @@ def verify_excel(path, expected_sig):
     for r in range(2,detail_ws.max_row+1):
         bot=detail_ws.cell(r,bot_col).value
         label=detail_ws.cell(r,label_col).value
-        buy=detail_ws.cell(r,buy_col).value
-        if bot in bot_map and label==BUY_LABEL and buy not in (None,""):
+        if bot in bot_map and label==BUY_LABEL:
             expected[bot_map[bot]]+=1
     actual={}
     for r in range(6,8):
