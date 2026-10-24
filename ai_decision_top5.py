@@ -564,175 +564,79 @@ def short_reason(c):
 # TELEGRAM MESSAGE
 # ============================================================
 
+def is_eligible_candidate(c):
+    """
+    Chỉ loại các mã thực sự KHÔNG MUA / ĐỨNG NGOÀI.
+    Các mã setup đạt nhưng đang CHỜ GIÁ / CHỜ ĐIỂM VÀO vẫn được giữ.
+    """
+    if c["hard_no_buy"]:
+        return False
+    if c["market_score"] < 30:
+        return False
+    if c["setup_score"] < MIN_SETUP_SCORE:
+        return False
+    if c["rr1"] < MIN_RR1:
+        return False
+    return True
+
+
 def build_message(candidates, signal_date):
-    best = choose_best(candidates)
-
     now = datetime.now(timezone(timedelta(hours=7)))
-
     first = candidates[0]
+    eligible = [c for c in candidates if is_eligible_candidate(c)]
 
     lines = [
-        "🧠 TOP5 AI — DECISION LAYER",
+        "🧠 CỔ PHIẾU ĐỦ ĐIỀU KIỆN — FROZEN V2",
         "",
         f"📅 Dữ liệu: {signal_date.strftime('%d/%m/%Y')}",
         f"🕒 Đánh giá lúc: {now.strftime('%H:%M %d/%m/%Y')}",
-        f"🌐 Thị trường: {first['market_label']} "
-        f"({first['market_score']:.1f}/100)",
+        f"🌐 Thị trường: {first['market_label']} ({first['market_score']:.1f}/100)",
         "",
-        "🏁 XẾP HẠNG CƠ HỘI THỰC TẾ",
     ]
 
-    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
-
-    for i, c in enumerate(candidates):
-        medal = medals[i] if i < len(medals) else f"#{i+1}"
-
-        lines.append(
-            f"{medal} {c['symbol']} — Decision {c['decision_score']:.1f} | "
-            f"Setup #{c['setup_rank']} {c['setup_score']:.1f} | "
-            f"AI #{c['ai_rank']} {fmt_ai(c['ai_score'])}"
-        )
-
-        lines.append(
-            f"   {c['action']} | {short_reason(c)}"
-        )
-
-    lines += [
-        "",
-        "━━━━━━━━━━━━━━━━━━━━",
-    ]
-
-    # --------------------------------------------------------
-    # NO QUALIFIED CANDIDATE
-    # --------------------------------------------------------
-
-    if best is None:
+    if not eligible:
         lines += [
-            "🚫 KẾT LUẬN: HÔM NAY CHƯA CÓ MÃ ĐỦ ĐẸP",
+            "🚫 HÔM NAY CHƯA CÓ MÃ ĐỦ ĐIỀU KIỆN.",
             "",
-            "Không ép chọn cổ phiếu chỉ vì nằm trong TOP5.",
-            "Ưu tiên bảo toàn vốn và chờ setup tốt hơn.",
+            "Các mã bị kết luận KHÔNG MUA / không đạt chuẩn đã được loại khỏi bản tin.",
             "",
-            "⚠️ Tiếp tục theo dõi TOP5 ở phiên kế tiếp.",
+            "ℹ️ Frozen V2 và Decision Layer vẫn tính toán như cũ; chỉ thay đổi phần hiển thị Telegram.",
         ]
-
         return "\n".join(lines)
 
-    # --------------------------------------------------------
-    # BEST CANDIDATE
-    # --------------------------------------------------------
+    lines.append(f"✅ Có {len(eligible)} mã đạt điều kiện:")
+    lines.append("")
 
-    if best["hard_no_buy"]:
-        status = "KHÔNG MUA"
+    for c in eligible:
+        if c["above_buy_zone"]:
+            status = "🟠 CHỜ GIÁ VỀ VÙNG MUA"
+        elif c["below_buy_zone"]:
+            status = "🟠 CHỜ ỔN ĐỊNH LẠI"
+        elif c["in_buy_zone"] and c["current_rr1"] < MIN_RR1:
+            status = "🟠 CHỜ ĐIỂM VÀO TỐT HƠN"
+        elif c["volume"] < VERY_WEAK_VOLUME:
+            status = "🟡 CHỜ DÒNG TIỀN XÁC NHẬN"
+        elif c["in_buy_zone"]:
+            status = "🟢 ĐỦ ĐIỀU KIỆN THEO DÕI MUA"
+        else:
+            status = "🟠 THEO DÕI ĐIỂM VÀO"
 
-    elif best["volume"] < VERY_WEAK_VOLUME:
-        status = "CHỜ VOLUME XÁC NHẬN"
-
-    elif best["above_buy_zone"]:
-        status = "CHỜ GIÁ VỀ BUY ZONE"
-
-    elif best["in_buy_zone"]:
-        status = "ĐANG Ở/GẦN BUY ZONE"
-
-    else:
-        status = "THEO DÕI"
-
-    lines += [
-        f"⭐ ƯU TIÊN #1: {best['symbol']}",
-        f"🎯 Trạng thái: {status}",
-        "",
-        f"💵 Giá hiện tại: {fmt_price(best['close'])}",
-        f"🟢 Vùng chờ mua: "
-        f"{fmt_price(best['buy_low'])} – {fmt_price(best['buy_high'])}",
-        f"🧱 Hỗ trợ: {fmt_price(best['support'])}",
-        f"🚧 Kháng cự: {fmt_price(best['resistance'])}",
-        f"📐 ATR14: {fmt_price(best['atr'])}",
-        "",
-        f"🛑 Cut loss: {fmt_price(best['stop'])}",
-        f"🎯 Target 1: {fmt_price(best['target1'])}",
-        f"🚀 Target 2: {fmt_price(best['target2'])}",
-        f"⚖️ R:R kế hoạch: 1:{best['rr1']:.2f} → 1:{best['rr2']:.2f}",
-        f"⚖️ R:R nếu mua ngay {fmt_price(best['close'])}: "
-        f"1:{best['current_rr1']:.2f} → 1:{best['current_rr2']:.2f}",
-        "",
-        f"⭐ Technical: {best['technical']:.1f}/100",
-        f"🎯 Setup Score: {best['setup_score']:.1f}/100",
-        f"🧠 Decision Score: {best['decision_score']:.1f}/100 "
-        f"(Raw {best['raw_decision_score']:.1f})",
-        f"📈 RSI14: {best['rsi']:.1f}",
-        f"💧 Volume: {best['volume']:.2f}x",
-        f"💪 Relative 20D: {best['rel20']:+.2%}",
-        "",
-    ]
-
-    # WHY
-    if best["reasons"]:
-        lines.append("✅ ĐIỂM TÍCH CỰC:")
-        for reason in best["reasons"][:5]:
-            lines.append(f"• {reason}")
-        lines.append("")
-
-    if best["warnings"]:
-        lines.append("⚠️ CẦN LƯU Ý:")
-        for warning in best["warnings"][:5]:
-            lines.append(f"• {warning}")
-        lines.append("")
-
-    # --------------------------------------------------------
-    # FINAL EXECUTION TEXT
-    # --------------------------------------------------------
-
-    if best["volume"] < VERY_WEAK_VOLUME:
-        execution = (
-            f"Chưa mua ngay {best['symbol']}. "
-            f"Chờ giá về {fmt_price(best['buy_low'])}–"
-            f"{fmt_price(best['buy_high'])} và dòng tiền cải thiện."
-        )
-
-    elif best["above_buy_zone"]:
-        execution = (
-            f"Không mua đuổi {best['symbol']} tại "
-            f"{fmt_price(best['close'])}. "
-            f"Chờ giá về {fmt_price(best['buy_low'])}–"
-            f"{fmt_price(best['buy_high'])}."
-        )
-
-    elif best["in_buy_zone"] and best["current_rr1"] < MIN_RR1:
-        execution = (
-            f"{best['symbol']} đang ở/gần Buy Zone nhưng R:R tại giá hiện tại "
-            f"chưa đạt {MIN_RR1:.2f}. Chưa mua vội; chờ điểm vào tốt hơn."
-        )
-
-    elif best["in_buy_zone"] and best["market_score"] < 45:
-        execution = (
-            f"{best['symbol']} đang gần vùng mua nhưng thị trường chưa thuận lợi. "
-            f"Chỉ theo dõi/thăm dò khi giá giữ được vùng "
-            f"{fmt_price(best['buy_low'])}–{fmt_price(best['buy_high'])}."
-        )
-
-    elif best["in_buy_zone"]:
-        execution = (
-            f"{best['symbol']} đang ở vùng có thể theo dõi mua "
-            f"{fmt_price(best['buy_low'])}–{fmt_price(best['buy_high'])}; "
-            f"R:R hiện tại đạt yêu cầu và tuân thủ stop {fmt_price(best['stop'])}."
-        )
-
-    else:
-        execution = (
-            f"Ưu tiên theo dõi {best['symbol']}. "
-            f"Vùng mua kế hoạch "
-            f"{fmt_price(best['buy_low'])}–{fmt_price(best['buy_high'])}."
-        )
+        lines += [
+            f"📌 {c['symbol']} | {status}",
+            f"💵 Giá: {fmt_price(c['close'])} | Buy: {fmt_price(c['buy_low'])} – {fmt_price(c['buy_high'])}",
+            f"🛑 Stop: {fmt_price(c['stop'])}",
+            f"🎯 T1: {fmt_price(c['target1'])} | 🚀 T2: {fmt_price(c['target2'])}",
+            f"⚖️ R:R kế hoạch: 1:{c['rr1']:.2f} → 1:{c['rr2']:.2f}",
+            f"⚖️ R:R nếu mua ngay: 1:{c['current_rr1']:.2f} → 1:{c['current_rr2']:.2f}",
+            f"⭐ Technical {c['technical']:.1f} | Setup {c['setup_score']:.1f} | Decision {c['decision_score']:.1f}",
+            f"📈 RSI {c['rsi']:.1f} | 💧 Volume {c['volume']:.2f}x | 💪 Relative20D {c['rel20']:+.2%}",
+            "",
+        ]
 
     lines += [
-        "📌 KẾT LUẬN CUỐI:",
-        execution,
-        "",
-        "ℹ️ Decision Layer không thay đổi Frozen V2 và không tự đặt lệnh.",
-        "⚠️ Đây là công cụ hỗ trợ quyết định/quản trị rủi ro, "
-        "không bảo đảm lợi nhuận.",
+        "📌 Chỉ hiển thị mã còn đủ điều kiện; các mã KHÔNG MUA đã được bỏ.",
+        "ℹ️ Frozen V2 không thay đổi và hệ thống không tự đặt lệnh.",
     ]
-
     return "\n".join(lines)
 
 
