@@ -335,12 +335,16 @@ def build_excel(sig,res):
     ws.insert_rows(1,amount=0)
     ws["A1"]=f"BÁO CÁO FORWARD TEST - CHỨNG KHOÁN GPT – {datetime.now(VN).strftime('%H:%M %d/%m/%Y')}"
     ws["A2"]="Ghi nhận TOÀN BỘ danh sách bot công bố và đóng băng nhãn tại T0 (MUA/CHỜ...). T0 là ngày tín hiệu; phiên kế tiếp = T1; theo dõi đến T20."
-    ws["A4"]="1. TỔNG QUAN"
-    ws["A11"]="2. LÃI/LỖ TRUNG BÌNH THEO TỪNG PHIÊN SAU TÍN HIỆU"
-    ws.merge_cells("A1:K1"); ws.merge_cells("A2:K2"); ws.merge_cells("A4:K4"); ws.merge_cells("A11:K11")
+    # Never merge rows that contain DataFrame headers/data.
+    # Section titles sit one row ABOVE each table.
+    ws["A4"]="1. TỔNG QUAN V2 vs V3.7"
+    ws["A10"]="2. HIỆU QUẢ THEO NHÃN TẠI T0"
+    ws["A17"]="3. LÃI/LỖ TRUNG BÌNH T0-T20: V2 vs V3.7"
+    ws.merge_cells("A1:K1"); ws.merge_cells("A2:K2")
     ws["A1"].font=Font(bold=True,size=16)
     ws["A2"].font=Font(italic=True,size=10)
-    ws["A4"].font=Font(bold=True,size=12); ws["A11"].font=Font(bold=True,size=12)
+    for rr in (4,10,17):
+        ws.cell(rr,1).font=Font(bold=True,size=12)
 
     thin=Side(style="thin",color="D9D9D9")
     header_fill=PatternFill("solid",fgColor="D9EAF7")
