@@ -155,27 +155,201 @@ def send(msg):
         r.read()
 
 def build_excel(sig,res):
+    """Create a management-style Forward Test workbook. Reporting layout follows
+    the useful structure of the reference workbook, while all data and trading
+    rules remain GPT Forward Test data/rules.
+    """
+    from openpyxl import load_workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
     out=ROOT/"FORWARD_TEST_CHUNG_KHOAN_GPT.xlsx"
-    latest=pd.DataFrame()
-    if not res.empty:
-        latest=(res.sort_values("t").groupby(["signal_date","bot","strategy_version","symbol"],as_index=False).tail(1).copy())
-    summary=[]
-    for bot in ["CỔ PHIẾU ĐẠT CHUẨN GPT","CỔ PHIẾU CHẤT LƯỢNG GPT"]:
-        q=latest[latest["bot"]==bot] if not latest.empty else pd.DataFrame()
-        summary.append({
-            "Bot":bot,"Số tín hiệu":len(q),
-            "Win rate %":(q["return_pct"].gt(0).mean()*100 if len(q) else 0),
-            "Lãi/lỗ TB %":(q["return_pct"].mean() if len(q) else 0),
-            "Tổng P/L giả định 100tr/mã":(q["pnl_100m_vnd"].sum() if len(q) else 0)
+
+    bot_map={
+        "CỔ PHIẾU ĐẠT CHUẨN GPT":"V2 - CỔ PHIẾU ĐẠT CHUẨN GPT",
+        "CỔ PHIẾU CHẤT LƯỢNG GPT":"V3.7 - CỔ PHIẾU CHẤT LƯỢNG GPT",
+    }
+
+    sig=sig.copy()
+    res=res.copy()
+    if not sig.empty:
+        sig["symbol"]=sig["symbol"].astype(str).str.upper().str.strip()
+
+    # One row per original BUY signal. GPT rule: signal day=T0, next session=T1.
+    details=[]
+    today=date.today()
+    vni_cache={}
+    for _,s in sig.iterrows():
+        sd=pd.to_datetime(s["signal_date"]).date()
+        symbol=str(s["symbol"]).upper().strip()
+        entry=fnum(s["entry_price"])
+        q=res[(res["signal_date"].astype(str)==str(s["signal_date"])) &
+              (res["bot"].astype(str)==str(s["bot"])) &
+              (res["symbol"].astype(str).str.upper()==symbol)].copy() if not res.empty else pd.DataFrame()
+
+        row={
+            "Bot":bot_map.get(str(s["bot"]),str(s["bot"])),
+            "Ngày tín hiệu (T0)":sd,
+            "Mã":symbol,
+            "Giá tín hiệu":entry,
+            "Vùng mua thấp":fnum(s.get("buy_low")),
+            "Vùng mua cao":fnum(s.get("buy_high")),
+            "Target 1":fnum(s.get("target1")),
+            "Target 2":fnum(s.get("target2")),
+            "Cắt lỗ":fnum(s.get("stop")),
+            "Điểm":fnum(s.get("score")),
+            "R:R":fnum(s.get("rr1")),
+            "T0":0.0,
+        }
+        for t in range(1,HORIZON+1): row[f"T{t}"]=float("nan")
+
+        if not q.empty:
+            q=q.sort_values("t")
+            for _,r in q.iterrows():
+                t=int(r["t"])
+                if 1<=t<=HORIZON: row[f"T{t}"]=fnum(r["return_pct"])
+            last=q.iloc[-1]
+            current=fnum(last["return_pct"])
+            high=fnum(last["mfe_pct"])
+            low=fnum(last["mae_pct"])
+            n=int(last["t"])
+            first_event=str(last.get("first_event") or "").strip()
+        else:
+            current=0.0; high=0.0; low=0.0; n=0; first_event=""
+
+        # VN-Index benchmark from T0 close to latest available trading close.
+        vni_ret=float("nan")
+        try:
+            key=(sd.isoformat(),today.isoformat())
+            if key not in vni_cache:
+                vh=fetch_history("VNINDEX",key[0],key[1])
+                vni_cache[key]=vh
+            vh=vni_cache[key]
+            if vh is not None and not vh.empty:
+                base=vh[vh["time"]<=sd]
+                future=vh[vh["time"]>sd].head(max(n,1))
+                if not base.empty and not future.empty:
+                    b=fnum(base.iloc[-1]["close"]); e=fnum(future.iloc[-1]["close"])
+                    if b>0 and e>0: vni_ret=(e/b-1)*100
+        except Exception as ex:
+            print(f"VNI benchmark unavailable for {sd}: {ex}")
+
+        if first_event=="STOP": plan="Dính cắt lỗ"
+        elif first_event in ("TARGET1","TARGET2"): plan="Chạm chốt lời"
+        else: plan="Chưa chạm"
+
+        row.update({
+            "Hiện tại %":current,
+            "Cao nhất %":high,
+            "Thấp nhất %":low,
+            "VN-Index cùng kỳ %":vni_ret,
+            "Hơn VN-Index %":(current-vni_ret if math.isfinite(vni_ret) else float("nan")),
+            "Kế hoạch bot":plan,
+            "Trạng thái":("Đủ 20/20 phiên" if n>=HORIZON else f"Đang theo dõi ({n}/20 phiên)"),
         })
+        details.append(row)
+
+    detail=pd.DataFrame(details)
+    base_cols=["Bot","Ngày tín hiệu (T0)","Mã","Giá tín hiệu","Vùng mua thấp","Vùng mua cao",
+               "Target 1","Target 2","Cắt lỗ","Điểm","R:R"]+[f"T{i}" for i in range(0,HORIZON+1)]+[
+               "Hiện tại %","Cao nhất %","Thấp nhất %","VN-Index cùng kỳ %","Hơn VN-Index %",
+               "Kế hoạch bot","Trạng thái"]
+    if detail.empty: detail=pd.DataFrame(columns=base_cols)
+    else: detail=detail.reindex(columns=base_cols)
+
+    # Management summary by bot.
+    summary=[]
+    for bot_full in bot_map.values():
+        q=detail[detail["Bot"]==bot_full].copy()
+        total=len(q)
+        complete=int(q["Trạng thái"].astype(str).str.startswith("Đủ").sum()) if total else 0
+        tracking=total-complete
+        hit=int((q["Kế hoạch bot"]=="Chạm chốt lời").sum()) if total else 0
+        stopn=int((q["Kế hoạch bot"]=="Dính cắt lỗ").sum()) if total else 0
+        summary.append({
+            "Bot":bot_full,"Tổng lệnh":total,"Đang theo dõi":tracking,"Đủ 20 phiên":complete,
+            "Lãi/lỗ hiện tại TB %":q["Hiện tại %"].mean() if total else 0,
+            "% lệnh đang lãi":q["Hiện tại %"].gt(0).mean()*100 if total else 0,
+            "VNI cùng kỳ TB %":q["VN-Index cùng kỳ %"].mean() if total else float("nan"),
+            "Hơn VNI TB %":q["Hơn VN-Index %"].mean() if total else float("nan"),
+            "Chạm chốt lời":hit,"Dính cắt lỗ":stopn,"Chưa chạm":total-hit-stopn,
+        })
+    summary_df=pd.DataFrame(summary)
+
+    # T0..T20 average performance table.
+    perf=[]
+    bots=list(bot_map.values())
+    for t in range(0,HORIZON+1):
+        rr={"Phiên":f"T{t}"}
+        for idx,bot_full in enumerate(bots,1):
+            q=detail[detail["Bot"]==bot_full].copy()
+            vals=pd.to_numeric(q[f"T{t}"],errors="coerce").dropna() if not q.empty else pd.Series(dtype=float)
+            # Alpha uses current benchmark only when available; for T tables leave blank if no aligned benchmark.
+            rr[f"Bot {idx} số lệnh"]=len(vals)
+            rr[f"Bot {idx} lãi TB %"]=vals.mean() if len(vals) else float("nan")
+            rr[f"Bot {idx} % lệnh lãi"]=vals.gt(0).mean()*100 if len(vals) else float("nan")
+        perf.append(rr)
+    perf_df=pd.DataFrame(perf)
+
+    # Write raw workbook first.
     with pd.ExcelWriter(out,engine="openpyxl") as xw:
-        pd.DataFrame(summary).to_excel(xw,index=False,sheet_name="TONG_QUAN")
-        sig.to_excel(xw,index=False,sheet_name="TIN_HIEU_MUA")
-        res.to_excel(xw,index=False,sheet_name="T1_T20_RAW")
-        if not res.empty:
-            wide=res.pivot_table(index=["signal_date","bot","symbol","entry_price"],columns="t",values=["close","return_pct"],aggfunc="last")
-            wide.columns=[f"{a}_T{int(b)}" for a,b in wide.columns]
-            wide.reset_index().to_excel(xw,index=False,sheet_name="T1_T20")
+        summary_df.to_excel(xw,index=False,sheet_name="Tổng hợp",startrow=4)
+        perf_df.to_excel(xw,index=False,sheet_name="Tổng hợp",startrow=11)
+        detail.to_excel(xw,index=False,sheet_name="Chi tiết từng mã")
+        detail[detail["Bot"]==bots[0]].to_excel(xw,index=False,sheet_name="Chi tiết V2")
+        detail[detail["Bot"]==bots[1]].to_excel(xw,index=False,sheet_name="Chi tiết V3.7")
+
+    # Presentation formatting.
+    wb=load_workbook(out)
+    ws=wb["Tổng hợp"]
+    ws.insert_rows(1,amount=0)
+    ws["A1"]=f"BÁO CÁO FORWARD TEST - CHỨNG KHOÁN GPT – {datetime.now(VN).strftime('%H:%M %d/%m/%Y')}"
+    ws["A2"]="Chỉ ghi nhận tín hiệu XANH MUA. Ngày phát tín hiệu = T0; phiên giao dịch kế tiếp = T1; theo dõi đến T20. Dữ liệu/logic hoàn toàn của GPT."
+    ws["A4"]="1. TỔNG QUAN"
+    ws["A11"]="2. LÃI/LỖ TRUNG BÌNH THEO TỪNG PHIÊN SAU TÍN HIỆU"
+    ws.merge_cells("A1:K1"); ws.merge_cells("A2:K2"); ws.merge_cells("A4:K4"); ws.merge_cells("A11:K11")
+    ws["A1"].font=Font(bold=True,size=16)
+    ws["A2"].font=Font(italic=True,size=10)
+    ws["A4"].font=Font(bold=True,size=12); ws["A11"].font=Font(bold=True,size=12)
+
+    thin=Side(style="thin",color="D9D9D9")
+    header_fill=PatternFill("solid",fgColor="D9EAF7")
+    section_fill=PatternFill("solid",fgColor="E2F0D9")
+    for sname in wb.sheetnames:
+        sh=wb[sname]
+        sh.freeze_panes="A2" if sname!="Tổng hợp" else "A6"
+        sh.auto_filter.ref=sh.dimensions if sname!="Tổng hợp" else f"A5:K7"
+        for row in sh.iter_rows():
+            for cell in row:
+                cell.alignment=Alignment(vertical="center")
+        if sname!="Tổng hợp":
+            for cell in sh[1]:
+                cell.font=Font(bold=True); cell.fill=header_fill; cell.border=Border(bottom=thin)
+        for col in range(1,sh.max_column+1):
+            letter=get_column_letter(col)
+            maxlen=0
+            for cell in sh[letter]:
+                if cell.value is not None: maxlen=max(maxlen,len(str(cell.value)))
+            sh.column_dimensions[letter].width=min(max(maxlen+2,10),28)
+
+    for rownum in (5,12):
+        for cell in ws[rownum]:
+            cell.font=Font(bold=True); cell.fill=header_fill; cell.border=Border(bottom=thin)
+    for rownum in (4,11):
+        ws.cell(rownum,1).fill=section_fill
+
+    # Percentage display for report percentage columns.
+    for sname in ["Chi tiết từng mã","Chi tiết V2","Chi tiết V3.7"]:
+        sh=wb[sname]
+        headers={c.value:c.column for c in sh[1]}
+        pct_headers=[f"T{i}" for i in range(0,HORIZON+1)]+["Hiện tại %","Cao nhất %","Thấp nhất %","VN-Index cùng kỳ %","Hơn VN-Index %"]
+        for h in pct_headers:
+            col=headers.get(h)
+            if col:
+                for r in range(2,sh.max_row+1):
+                    sh.cell(r,col).number_format='0.00"%"'
+
+    wb.save(out)
     return out
 
 def upload_drive(path):
