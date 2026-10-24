@@ -9,21 +9,39 @@ def f(x,n=2):
     try:return f"{float(x):.{n}f}"
     except:return "-"
 
+def action_label(x, realtime=False):
+    price=float(x.get("current_price",x.get("close")))
+    low=float(x.get("buy_low"))
+    high=float(x.get("buy_high"))
+    rr=float(x.get("current_rr1",x.get("rr1")))
+
+    # V3.7 Quality Gate already guarantees the stock itself is qualified.
+    # This layer only tells the user whether the CURRENT PRICE is executable.
+    if price < low:
+        return "🟠 CHỜ GIÁ ỔN ĐỊNH/VỀ BUY ZONE"
+    if price > high:
+        return "🟠 CHỜ GIÁ VỀ BUY ZONE"
+    if rr < 1.20:
+        return "🟠 CHỜ ĐIỂM VÀO TỐT HƠN"
+    return "🟢 CANH MUA"
+
 def build(mode):
     realtime=mode=="midday"
     p=ROOT/("TOP5_ADVANCED_V3_REALTIME.csv" if realtime else "TOP5_ADVANCED_V3.csv")
     if not p.exists(): raise RuntimeError("Thieu file ket qua: "+str(p))
     d=pd.read_csv(p)
-    title="🌅 TOP CỔ PHIẾU ĐÁNG MUA GPT V3.7" if not realtime else "⚡ CỔ PHIẾU CÒN ĐÁNG MUA - REALTIME V3.7"
+    title="🌅 CỔ PHIẾU ĐÁNG MUA GPT V3.7" if not realtime else "⚡ CỔ PHIẾU CÒN ĐÁNG MUA - REALTIME V3.7"
     lines=[title,datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("🕒 %d/%m/%Y %H:%M"),
-           "✅ Chỉ hiển thị mã còn đủ chuẩn MUA",""]
+           "✅ Đã qua Quality Gate — xem HÀNH ĐỘNG để biết điểm mua",""]
     if d.empty:
         lines.append("⛔ Hiện không có cổ phiếu đủ chuẩn mua.")
     for i,x in d.reset_index(drop=True).iterrows():
         price=x.get("current_price",x.get("close"))
         rr=x.get("current_rr1",x.get("rr1"))
+        action=action_label(x,realtime)
         lines += [
-          f"🏆 #{i+1} {x.symbol} | ⭐ {f(x.advanced_score,1)}",
+          f"📌 {x.symbol} | ⭐ {f(x.advanced_score,1)}",
+          f"⚡ Hành động: {action}",
           f"💵 Giá: {f(price)} | Buy: {f(x.buy_low)} – {f(x.buy_high)}",
           f"🛑 Stop: {f(x.stop)}",
           f"🎯 T1: {f(x.target1)} | 🚀 T2: {f(x.target2)}",
@@ -32,6 +50,14 @@ def build(mode):
           ""
         ]
     if realtime:
+        buy_now=[]
+        for _,x in d.iterrows():
+            if action_label(x,True)=="🟢 CANH MUA":
+                buy_now.append(str(x.symbol))
+        if buy_now:
+            lines += ["━━━━━━━━━━━━━━━━━━━━", "🟢 CÒN MUA ĐƯỢC NGAY: "+", ".join(buy_now)]
+        else:
+            lines += ["━━━━━━━━━━━━━━━━━━━━", "⛔ Hiện không có mã nào còn điểm mua đạt chuẩn realtime."]
         lines.append("📡 Giá thực thi: KBS realtime | Nền chọn mã: phiên EOD hoàn chỉnh")
     else:
         lines.append("📌 Nền chọn mã: phiên EOD hoàn chỉnh")
@@ -41,8 +67,6 @@ def main(mode=None):
     mode=(mode or (sys.argv[1] if len(sys.argv)>1 else "midday")).lower()
     msg=build(mode)
     print("\n"+msg,flush=True)
-    # Production uses the SAME Telegram secrets as Frozen V2.
-    # Legacy V3 names remain as local fallback only.
     token=(os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
     chat=(os.getenv("CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID") or "").strip()
     if not token or not chat:
