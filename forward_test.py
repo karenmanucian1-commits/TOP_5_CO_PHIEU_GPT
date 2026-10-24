@@ -333,6 +333,23 @@ def build_excel(sig,res):
     wb=load_workbook(out)
     ws=wb["Tổng hợp"]
     ws.insert_rows(1,amount=0)
+
+    # Re-write summary tables cell-by-cell after pandas export.
+    # This avoids Google Sheets XLSX import losing DataFrame text while retaining filters/styles.
+    def write_table_direct(ws, df, header_row, start_col=1):
+        for j,colname in enumerate(df.columns,start_col):
+            cell=ws.cell(header_row,j,value=str(colname))
+            cell.font=Font(bold=True,color="000000")
+        for i,record in enumerate(df.itertuples(index=False,name=None),header_row+1):
+            for j,val in enumerate(record,start_col):
+                if pd.isna(val):
+                    val=None
+                cell=ws.cell(i,j,value=val)
+                cell.font=Font(color="000000")
+
+    write_table_direct(ws,summary_df,5)
+    write_table_direct(ws,label_df,11)
+    write_table_direct(ws,perf_df,18)
     ws["A1"]=f"BÁO CÁO FORWARD TEST - CHỨNG KHOÁN GPT – {datetime.now(VN).strftime('%H:%M %d/%m/%Y')}"
     ws["A2"]="Ghi nhận TOÀN BỘ danh sách bot công bố và đóng băng nhãn tại T0 (MUA/CHỜ...). T0 là ngày tín hiệu; phiên kế tiếp = T1; theo dõi đến T20."
     # Never merge rows that contain DataFrame headers/data.
@@ -352,7 +369,7 @@ def build_excel(sig,res):
     for sname in wb.sheetnames:
         sh=wb[sname]
         sh.freeze_panes="A2" if sname!="Tổng hợp" else "A6"
-        sh.auto_filter.ref=sh.dimensions if sname!="Tổng hợp" else f"A5:K7"
+        sh.auto_filter.ref=sh.dimensions if sname!="Tổng hợp" else None
         for row in sh.iter_rows():
             for cell in row:
                 cell.alignment=Alignment(vertical="center")
