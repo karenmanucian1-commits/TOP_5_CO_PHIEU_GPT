@@ -403,6 +403,27 @@ def build_excel(sig,res):
     wb.save(out)
     return out
 
+def verify_excel(path, expected_sig):
+    """Fail closed: never upload a visually empty/invalid Forward Test workbook."""
+    wb=load_workbook(path,data_only=True)
+    ws=wb["Tổng hợp"]
+    expected={
+        "V2 - CỔ PHIẾU ĐẠT CHUẨN GPT": int((expected_sig["bot"].astype(str)=="CỔ PHIẾU ĐẠT CHUẨN GPT").sum()),
+        "V3.7 - CỔ PHIẾU CHẤT LƯỢNG GPT": int((expected_sig["bot"].astype(str)=="CỔ PHIẾU CHẤT LƯỢNG GPT").sum()),
+    }
+    actual={}
+    for r in range(6,8):
+        name=ws.cell(r,1).value
+        count=ws.cell(r,2).value
+        if name is not None:
+            actual[str(name)]=int(count or 0)
+    if actual != expected:
+        raise RuntimeError(f"Forward Test XLSX self-check FAILED: expected={expected}, actual={actual}")
+    if ws["A5"].value!="Bot" or ws["B5"].value!="Tổng mã":
+        raise RuntimeError("Forward Test XLSX self-check FAILED: summary header missing")
+    print(f"XLSX SELF-CHECK OK: {actual}")
+    return actual
+
 def upload_drive(path):
     url=(os.getenv("GDRIVE_WEBHOOK") or "").strip()
     if not url: raise RuntimeError("Thieu GDRIVE_WEBHOOK")
@@ -417,6 +438,7 @@ def upload_drive(path):
 def report():
     sig,res=evaluate()
     xlsx=build_excel(sig,res)
+    verify_excel(xlsx,sig)
     upload_drive(xlsx)
     send(build_report(sig,res))
 
