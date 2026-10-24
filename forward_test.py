@@ -432,12 +432,23 @@ def verify_excel(path, expected_sig):
     ws=wb["Tổng hợp"]
     # Summary counts only BUY trades that already have a valid T0/buy price.
     # Signals waiting for the next tradable T0 remain in Detail and must not inflate Summary.
-    expected={}
-    for bot_short,bot_full in [
-        ("V2 - CỔ PHIẾU ĐẠT CHUẨN GPT","CỔ PHIẾU ĐẠT CHUẨN GPT"),
-        ("V3.7 - CỔ PHIẾU CHẤT LƯỢNG GPT","CỔ PHIẾU CHẤT LƯỢNG GPT"),
-    ]:
-        expected[bot_short]=int(((detail["Bot"]==bot_full) & (detail["Nhãn tại T0"]==BUY_LABEL) & detail["Giá mua"].notna()).sum())
+    detail_ws=wb["Chi tiết từng mã"]
+    headers={c.value:c.column for c in detail_ws[1]}
+    bot_col=headers["Bot"]; label_col=headers["Nhãn tại T0"]; buy_col=headers["Giá mua"]
+    expected={
+        "V2 - CỔ PHIẾU ĐẠT CHUẨN GPT":0,
+        "V3.7 - CỔ PHIẾU CHẤT LƯỢNG GPT":0,
+    }
+    bot_map={
+        "CỔ PHIẾU ĐẠT CHUẨN GPT":"V2 - CỔ PHIẾU ĐẠT CHUẨN GPT",
+        "CỔ PHIẾU CHẤT LƯỢNG GPT":"V3.7 - CỔ PHIẾU CHẤT LƯỢNG GPT",
+    }
+    for r in range(2,detail_ws.max_row+1):
+        bot=detail_ws.cell(r,bot_col).value
+        label=detail_ws.cell(r,label_col).value
+        buy=detail_ws.cell(r,buy_col).value
+        if bot in bot_map and label==BUY_LABEL and buy not in (None,""):
+            expected[bot_map[bot]]+=1
     actual={}
     for r in range(6,8):
         name=ws.cell(r,1).value
