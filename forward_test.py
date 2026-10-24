@@ -46,6 +46,17 @@ def capture():
     now=datetime.now(VN)
     rows=[]
 
+    # Use the completed EOD session date, never the workflow execution date.
+    signal_date=now.date().isoformat()
+    eod_file=ROOT/"TOP5_V2_TODAY.csv"
+    if eod_file.exists():
+        try:
+            eod=pd.read_csv(eod_file)
+            if not eod.empty and "date" in eod.columns:
+                signal_date=pd.to_datetime(eod["date"].iloc[0]).date().isoformat()
+        except Exception as ex:
+            print(f"EOD signal date fallback to workflow date: {ex}")
+
     # V2: only actual green BUY signal, never orange WAIT.
     import ai_decision_top5 as v2
     candidates, signal_eod=v2.build_decision()
@@ -53,7 +64,7 @@ def capture():
         if not v2.is_eligible_candidate(c): continue
         if c.get("action")!="🟢 ĐỦ ĐIỀU KIỆN THEO DÕI MUA": continue
         rows.append({
-            "signal_date":now.date().isoformat(),"signal_time":now.strftime("%Y-%m-%d %H:%M:%S"),
+            "signal_date":signal_date,"signal_time":now.strftime("%Y-%m-%d %H:%M:%S"),
             "bot":"CỔ PHIẾU ĐẠT CHUẨN GPT","strategy_version":"V2_FROZEN_DECISION_2026-10-24",
             "symbol":c["symbol"],"entry_price":c["close"],"buy_low":c["buy_low"],"buy_high":c["buy_high"],
             "stop":c["stop"],"target1":c["target1"],"target2":c["target2"],"rr1":c["current_rr1"],
@@ -66,9 +77,9 @@ def capture():
     if p.exists():
         d=pd.read_csv(p)
         for _,x in d.iterrows():
-            if v3tg.action_label(x,False)!="🟢 CANH MUA": continue
+            if v3tg.action_label(x,False)!="🟢 ĐỦ ĐIỀU KIỆN MUA": continue
             rows.append({
-                "signal_date":now.date().isoformat(),"signal_time":now.strftime("%Y-%m-%d %H:%M:%S"),
+                "signal_date":signal_date,"signal_time":now.strftime("%Y-%m-%d %H:%M:%S"),
                 "bot":"CỔ PHIẾU CHẤT LƯỢNG GPT","strategy_version":"V3_7_GATE_2026-10-24",
                 "symbol":str(x.symbol).upper(),"entry_price":x.close,"buy_low":x.buy_low,"buy_high":x.buy_high,
                 "stop":x.stop,"target1":x.target1,"target2":x.target2,"rr1":x.rr1,
