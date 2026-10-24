@@ -17,16 +17,24 @@ jobs:
           python-version: "3.12"
           cache: "pip"
       - run: pip install -r requirements.txt
-      - name: Restore stock data
+      - name: Restore latest production cache read-only copy
+        id: stock-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: stock_cache
+          key: backtest-read-${{ github.run_id }}
+          restore-keys: |
+            stock-cache-
+      - name: Seed only if cache unavailable
+        if: steps.stock-cache.outputs.cache-matched-key == ''
         run: |
           rm -rf stock_cache
           mkdir stock_cache
           unzip -q stock_cache_seed.zip -d stock_cache
-          echo "stock files: $(find stock_cache -name '*.csv' | wc -l)"
+      - name: Verify stock data
+        run: echo "stock files: $(find stock_cache -name '*.csv' | wc -l)"
       - name: Restore financial DB
         run: python restore_financial_db.py
-      - name: Refresh runner-only market cache through latest session
-        run: python update_scanner_data.py
       - name: Build historical scanner
         run: python build_scanner_dataset_v2.py
       - name: Run isolated six-month backtest
