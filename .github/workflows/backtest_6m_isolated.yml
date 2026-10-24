@@ -25,6 +25,8 @@ jobs:
           echo "stock files: $(find stock_cache -name '*.csv' | wc -l)"
       - name: Restore financial DB
         run: python restore_financial_db.py
+      - name: Refresh runner-only market cache through latest session
+        run: python update_scanner_data.py
       - name: Build historical scanner
         run: python build_scanner_dataset_v2.py
       - name: Run isolated six-month backtest
