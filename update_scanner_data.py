@@ -48,6 +48,7 @@ REQUEST_DELAY = 0.7
 
 # Quality-universe rules agreed for production.
 MIN_AVG_VOLUME_20 = 10_000
+MIN_TRADED_DAYS_20 = 15
 MAX_STALE_DAYS = 7
 
 parser = argparse.ArgumentParser(
@@ -643,6 +644,7 @@ def rebuild_quality_universe(full_results):
 
     Rules:
       - avg_volume_20 >= 10,000 shares/session
+      - traded_days_20 >= 15/20
       - latest data not stale by more than 7 calendar days
     """
     if not FULL_MODE:
@@ -685,6 +687,7 @@ def rebuild_quality_universe(full_results):
 
     quality = full[
         (full["avg_volume_20"].fillna(0) >= MIN_AVG_VOLUME_20)
+        & (full["traded_days_20"].fillna(0) >= MIN_TRADED_DAYS_20)
         & (stale_days.fillna(9999) <= MAX_STALE_DAYS)
     ].copy()
 
@@ -721,6 +724,7 @@ def rebuild_quality_universe(full_results):
     print(
         "Rules               : "
         f"avg_volume_20 >= {MIN_AVG_VOLUME_20:,}; "
+        f"traded_days_20 >= {MIN_TRADED_DAYS_20}; "
         f"stale <= {MAX_STALE_DAYS} days"
     )
 
