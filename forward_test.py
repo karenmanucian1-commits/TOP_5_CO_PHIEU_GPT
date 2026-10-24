@@ -153,8 +153,10 @@ def evaluate():
                 vv=vni[vni["time"]==r.time]
                 if not vv.empty: vr=(fnum(vv.iloc[0]["close"])/vopen-1)*100
             if t>=2 and not event:
-                if math.isfinite(t1) and fnum(r.high,-float("inf"))>=t1: event=f"Chạm chốt lời (T{t})"
-                elif math.isfinite(stop) and close<stop: event=f"Dính cắt lỗ (T{t})"
+                # Conservative rule shared with backtest: if both conditions occur
+                # in the same daily bar, STOP takes precedence over TARGET 1.
+                if math.isfinite(stop) and close<stop: event=f"Dính cắt lỗ (T{t})"
+                elif math.isfinite(t1) and fnum(r.high,-float("inf"))>=t1: event=f"Chạm chốt lời (T{t})"
             rows.append({"signal_date":s.signal_date,"session":session,"bot":s.bot,"strategy_version":s.strategy_version,
                 "symbol":symbol,"buy_date":buy_date.isoformat(),"buy_price":buy_price,"trade_day":r.time.isoformat(),"t":t,
                 "close":close,"return_pct":ret,"vni_return_pct":vr,"alpha_pct":ret-vr if math.isfinite(vr) else float("nan"),
