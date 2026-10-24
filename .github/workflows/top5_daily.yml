@@ -223,7 +223,7 @@ jobs:
 
       - name: Capture Forward Test BUY signals
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
-        run: python forward_test.py capture
+        run: python forward_test.py capture morning
 
       - name: Persist Forward Test BUY ledger
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
@@ -252,4 +252,22 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python run_top5_advanced_v3_7.py midday
+
+      - name: Capture Forward Test midday signals
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        run: python forward_test.py capture midday
+
+      - name: Persist Forward Test midday ledger
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        run: |
+          git config user.name "Forward Test Bot"
+          git config user.email "forward-test-bot@users.noreply.github.com"
+          git add FORWARD_SIGNALS.csv
+          if git diff --cached --quiet; then
+            echo "Forward midday ledger has no changes."
+          else
+            git commit -m "Update Forward Test midday signals"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
 
