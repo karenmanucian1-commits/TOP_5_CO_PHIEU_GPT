@@ -221,6 +221,10 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python run_top5_advanced_v3_7.py morning
 
+      - name: Capture Forward Test BUY signals
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
+        run: python forward_test.py capture
+
       - name: Save V3 morning TOP for midday
         if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5')) && success() }}
         uses: actions/cache/save@v4
