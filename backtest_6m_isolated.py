@@ -208,10 +208,12 @@ def main():
     for day,g in tech.groupby("date"):
         cand=[]
         for r in g.itertuples(index=False):
+            # Cheap technical gates first; finance PIT is the expensive step.
+            if not (r.trend_score>=65 and r.rs_score>=55 and r.money_flow_score>=45 and r.avg_value20_bn>=3 and r.rr1>=1.20):continue
             if r.symbol not in fg:continue
             key=(r.symbol,day)
             fs,cov,pe,pb,typ=fcache.setdefault(key,finance_score(fg[r.symbol],day,float(r.close)))
-            if not (pd.notna(fs) and fs>=60 and cov>=66 and r.trend_score>=65 and r.rs_score>=55 and r.money_flow_score>=45 and r.avg_value20_bn>=3 and r.rr1>=1.20):continue
+            if not (pd.notna(fs) and fs>=60 and cov>=66):continue
             adv=(fs*.30+r.trend_score*.16+r.rs_score*.15+r.money_flow_score*.12+r.momentum_score*.08+r.liquidity_score*.07+r.entry_score*.12)*np.clip(cov/80,.85,1)
             x={"close":r.close,"buy_low":r.buy_low,"buy_high":r.buy_high,"stop":r.stop,"target1":r.target1,"rr1":r.rr1,
                "momentum_score":r.momentum_score,"money_flow_score":r.money_flow_score,"liquidity_score":r.liquidity_score}
