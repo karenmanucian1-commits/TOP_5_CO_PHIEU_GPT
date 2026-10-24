@@ -221,15 +221,19 @@ def build_excel(sig,res,repeats=None):
         symbol=str(s["symbol"]).upper().strip()
         entry=fnum(s["entry_price"])
         q=res[(res["signal_date"].astype(str)==str(s["signal_date"])) &
+              (res["session"].astype(str)==str(s.get("session") or "6:00")) &
               (res["bot"].astype(str)==str(s["bot"])) &
               (res["symbol"].astype(str).str.upper()==symbol)].copy() if not res.empty else pd.DataFrame()
 
         row={
             "Bot":bot_map.get(str(s["bot"]),str(s["bot"])),
             "Nhãn tại T0":str(s.get("status") or ""),
-            "Lượt":str(s.get("session") or "6:00"),\n            "Ngày tín hiệu":sd,\n            "Ngày mua (T0)":None,
+            "Lượt":str(s.get("session") or "6:00"),
+            "Ngày tín hiệu":sd,
+            "Ngày mua (T0)":None,
             "Mã":symbol,
-            "Giá tín hiệu":entry,\n            "Giá mua":float("nan"),
+            "Giá tín hiệu":entry,
+            "Giá mua":float("nan"),
             "Vùng mua thấp":fnum(s.get("buy_low")),
             "Vùng mua cao":fnum(s.get("buy_high")),
             "Target 1":fnum(s.get("target1")),
@@ -246,6 +250,9 @@ def build_excel(sig,res,repeats=None):
             for _,r in q.iterrows():
                 t=int(r["t"])
                 if 0<=t<=HORIZON: row[f"T{t}"]=fnum(r["return_pct"])
+            first=q.iloc[0]
+            row["Ngày mua (T0)"]=pd.to_datetime(first["buy_date"]).date()
+            row["Giá mua"]=fnum(first["buy_price"])
             last=q.iloc[-1]
             current=fnum(last["return_pct"])
             high=fnum(last["mfe_pct"])
@@ -267,7 +274,8 @@ def build_excel(sig,res,repeats=None):
             "VN-Index cùng kỳ %":vni_ret,
             "Hơn VN-Index %":alpha,
             "Kế hoạch bot":plan,
-            "Trạng thái":("Đã đủ 20 phiên" if n>=HORIZON else (f"Đang theo dõi ({max(n,0)}/20 phiên)" if not q.empty else ("THEO DÕI / CHỜ" if not is_buy_label(s.get("status")) else "Chờ phiên T0"))),\n            "Số lần KN lại":0,
+            "Trạng thái":("Đã đủ 20 phiên" if n>=HORIZON else (f"Đang theo dõi ({max(n,0)}/20 phiên)" if not q.empty else ("THEO DÕI / CHỜ" if not is_buy_label(s.get("status")) else "Chờ phiên T0"))),
+            "Số lần KN lại":0,
         })
         details.append(row)
 
@@ -303,8 +311,8 @@ def build_excel(sig,res,repeats=None):
     for bot_full in bot_map.values():
         q=detail[detail["Bot"]==bot_full].copy()
         for label_group,mask in [
-            ("ĐỦ ĐIỀU KIỆN MUA",q["Nhãn tại T0"].astype(str).str.contains("ĐỦ ĐIỀU KIỆN",case=False,na=False)),
-            ("THEO DÕI / CHỜ",~q["Nhãn tại T0"].astype(str).str.contains("ĐỦ ĐIỀU KIỆN",case=False,na=False)),
+            ("ĐỦ ĐIỀU KIỆN MUA",q["Nhãn tại T0"].astype(str).eq(BUY_LABEL)),
+            ("THEO DÕI / CHỜ",~q["Nhãn tại T0"].astype(str).eq(BUY_LABEL)),
         ]:
             z=q[mask].copy()
             label_rows.append({
@@ -321,7 +329,7 @@ def build_excel(sig,res,repeats=None):
     for t in range(0,HORIZON+1):
         rr={"Phiên":f"T{t}"}
         for name,bot_full in [("V2",bots[0]),("V3.7",bots[1])]:
-            q=detail[detail["Bot"]==bot_full].copy()
+            q=detail[(detail["Bot"]==bot_full) & (detail["Nhãn tại T0"]==BUY_LABEL) & detail["Giá mua"].notna()].copy()
             vals=pd.to_numeric(q[f"T{t}"],errors="coerce").dropna() if not q.empty else pd.Series(dtype=float)
             rr[f"{name} số mã"]=len(vals)
             rr[f"{name} lãi TB %"]=vals.mean() if len(vals) else float("nan")
@@ -422,9 +430,10 @@ def verify_excel(path, expected_sig):
     from openpyxl import load_workbook
     wb=load_workbook(path,data_only=True)
     ws=wb["Tổng hợp"]
+    buy_sig=expected_sig[expected_sig["status"].map(is_buy_label)].copy()
     expected={
-        "V2 - CỔ PHIẾU ĐẠT CHUẨN GPT": int((expected_sig["bot"].astype(str)=="CỔ PHIẾU ĐẠT CHUẨN GPT").sum()),
-        "V3.7 - CỔ PHIẾU CHẤT LƯỢNG GPT": int((expected_sig["bot"].astype(str)=="CỔ PHIẾU CHẤT LƯỢNG GPT").sum()),
+        "V2 - CỔ PHIẾU ĐẠT CHUẨN GPT": int((buy_sig["bot"].astype(str)=="CỔ PHIẾU ĐẠT CHUẨN GPT").sum()),
+        "V3.7 - CỔ PHIẾU CHẤT LƯỢNG GPT": int((buy_sig["bot"].astype(str)=="CỔ PHIẾU CHẤT LƯỢNG GPT").sum()),
     }
     actual={}
     for r in range(6,8):
@@ -444,7 +453,7 @@ def upload_drive(path):
     if not url: raise RuntimeError("Thieu GDRIVE_WEBHOOK")
     payload=json.dumps({"name":path.name,"data":base64.b64encode(path.read_bytes()).decode("ascii")}).encode("utf-8")
     req=urllib.request.Request(url,data=payload,headers={"Content-Type":"application/json"},method="POST")
-    with urllib.request.urlopen(req,timeout=60,context=ssl.create_default_context(cafile=certifi.where())) as r:
+    with urllib.request.urlopen(req,timeout=120,context=ssl.create_default_context(cafile=certifi.where())) as r:
         ans=r.read().decode("utf-8","replace").strip()
     if not ans.startswith("OK "): raise RuntimeError("Google Drive upload failed: "+ans)
     print(ans)
