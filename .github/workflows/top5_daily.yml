@@ -225,6 +225,20 @@ jobs:
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python forward_test.py capture
 
+      - name: Persist Forward Test BUY ledger
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
+        run: |
+          git config user.name "Forward Test Bot"
+          git config user.email "forward-test-bot@users.noreply.github.com"
+          git add FORWARD_SIGNALS.csv
+          if git diff --cached --quiet; then
+            echo "Forward signal ledger has no changes."
+          else
+            git commit -m "Update Forward Test BUY signals"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
       - name: Save V3 morning TOP for midday
         if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5')) && success() }}
         uses: actions/cache/save@v4
