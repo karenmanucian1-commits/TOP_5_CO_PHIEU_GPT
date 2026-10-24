@@ -871,7 +871,7 @@ def load_data():
 
 def prepare_analyses(df):
     records = []
-    for _, row in df.head(5).iterrows():
+    for _, row in df.iterrows():
         a = analyze_stock(row)
 
         # SETUP SCORE: post-model entry quality only.
