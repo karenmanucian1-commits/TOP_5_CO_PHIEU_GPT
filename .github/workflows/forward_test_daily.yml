@@ -2,6 +2,9 @@ name: Forward Test - Chứng Khoán GPT
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/forward_test_daily.yml]
   schedule:
     # 18:00 Viet Nam (UTC+7), Monday-Friday
     - cron: "0 11 * * 1-5"
