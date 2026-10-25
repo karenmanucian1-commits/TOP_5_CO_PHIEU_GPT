@@ -105,3 +105,5 @@ def main():
 if __name__=="__main__":main()
 
 # trigger final validation
+
+# rerun after generated-trades fallback
