@@ -66,7 +66,9 @@ def simulate(g,entry_date,entry,stop,target):
 
 def main():
     raw=load_raw()
-    t=pd.read_csv(ROOT/"BACKTEST_FULL_TRADES.csv")
+    p=ROOT/"BACKTEST_FULL_TRADES.csv"
+    if not p.exists(): p=ROOT/"BACKTEST_6M_TRADES.csv"
+    t=pd.read_csv(p)
     for c in ["signal_date","entry_date"]:t[c]=pd.to_datetime(t[c]).dt.normalize()
     # Benchmark is point-in-time equal-weight liquid universe.
     cache={}
