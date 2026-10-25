@@ -230,8 +230,9 @@ def main():
         for adv,r in cand:
             trades.append(dict(model="V3.7",signal_date=day,symbol=r.symbol,stop=float(r.stop),target1=float(r.target1)))
     out=exits(trades,raw)
+    out["period"]=np.where(out.signal_date<=DEV_END,"Development","Holdout")
     summaries=[]
-    for modelname,g in out.groupby("model"):
+    for (period,modelname),g in out.groupby(["period","model"]):
         row={"period":period,"model":modelname,"trades":len(g)}
         for k in [5,10,20]:
             x=g[f"ret{k}"].dropna(); row[f"avg_ret{k}"]=x.mean(); row[f"median_ret{k}"]=x.median(); row[f"win{k}"]=(x>0).mean()*100; row[f"n{k}"]=len(x)
