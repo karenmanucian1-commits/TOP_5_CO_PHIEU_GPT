@@ -233,7 +233,9 @@ def main():
         summaries.append(row)
     pd.DataFrame(summaries).to_csv(ROOT/"BACKTEST_6M_SUMMARY.csv",index=False,encoding="utf-8-sig")
     out.to_csv(ROOT/"BACKTEST_6M_TRADES.csv",index=False,encoding="utf-8-sig")
-    audit=f"""ISOLATED 6M BACKTEST\nPeriod: {START.date()} -> {END.date()}\\nDevelopment locked: 2023-01-01 -> 2026-04-23\\nHoldout locked: 2026-04-24 -> 2026-10-23\nProduction bot files modified by this engine: NO\nEntry: next trading session Open (EOD replay).\nFee: 0.4%.\nExit event from T2: Close < Stop checked BEFORE High >= T1. Stop executes next session Open; T1 executes at T1.\nDedup: same model+symbol blocked for 20 sessions after accepted signal.\nFinance point-in-time: {fin_source}.\nImportant limitation: historical 11:35 intraday prices are not present in repository, therefore this methodology run replays EOD/morning signals only; it does not fabricate midday prices.\nRecent signals without enough future bars remain NaN for T5/T10/T20 rather than being fabricated.\n"""
+    audit=f"""ISOLATED 6M BACKTEST\nPeriod: {START.date()} -> {END.date()}
+Development locked: 2023-01-01 -> 2026-04-23
+Holdout locked: 2026-04-24 -> 2026-10-23\nProduction bot files modified by this engine: NO\nEntry: next trading session Open (EOD replay).\nFee: 0.4%.\nExit event from T2: Close < Stop checked BEFORE High >= T1. Stop executes next session Open; T1 executes at T1.\nDedup: same model+symbol blocked for 20 sessions after accepted signal.\nFinance point-in-time: {fin_source}.\nImportant limitation: historical 11:35 intraday prices are not present in repository, therefore this methodology run replays EOD/morning signals only; it does not fabricate midday prices.\nRecent signals without enough future bars remain NaN for T5/T10/T20 rather than being fabricated.\n"""
     (ROOT/"BACKTEST_6M_AUDIT.txt").write_text(audit,encoding="utf-8")
     print(pd.DataFrame(summaries).to_string(index=False)); print(audit)
 
