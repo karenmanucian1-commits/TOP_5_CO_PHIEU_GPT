@@ -1,0 +1,30 @@
+name: Backtest Final Validation
+on:
+  push:
+    paths:
+      - "backtest_final_validation.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pandas numpy
+      - name: Restore stock data
+        run: |
+          rm -rf stock_cache && mkdir stock_cache
+          unzip -q stock_cache_seed.zip -d stock_cache
+      - name: Recreate full trades
+        run: |
+          pip install -r requirements.txt
+          python restore_financial_db.py
+          python build_scanner_dataset_v2.py
+          python backtest_full_isolated.py
+      - name: Final validation
+        run: python backtest_final_validation.py
