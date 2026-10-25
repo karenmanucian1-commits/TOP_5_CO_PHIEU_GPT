@@ -181,8 +181,15 @@ def exits(tr,raw):
                 reason=f"STOP_T{t}"; break
             if float(b.high)>=z["target1"]:
                 xp=z["target1"]; xd=b.date; reason=f"T1_T{t}"; break
-        rec["exit_reason"]=reason; rec["exit_date"]=xd; rec["planned_ret"]=(xp/buy-1-FEE)*100\n        # VNINDEX alpha, aligned to the same entry session and T20 horizon.\n        vi=raw.get("VNINDEX")\n        if vi is not None:\n            vv=vi[vi.date>=ed].reset_index(drop=True)\n            rec["vnindex20"]=(float(vv.iloc[19].close)/float(vv.iloc[0].open)-1)*100 if len(vv)>=20 else np.nan\n            rec["alpha_vnindex20"]=rec["ret20"]-rec["vnindex20"] if pd.notna(rec["ret20"]) and pd.notna(rec["vnindex20"]) else np.nan
-        rec["stop_hit"]=reason.startswith("STOP"); rec["t1_hit"]=reason.startswith("T1")
+        rec["exit_reason"]=reason; rec["exit_date"]=xd; rec["planned_ret"]=(xp/buy-1-FEE)*100
+        # VNINDEX alpha, aligned to the same entry session and T20 horizon.
+        vi=raw.get("VNINDEX")
+        rec["vnindex20"]=np.nan; rec["alpha_vnindex20"]=np.nan
+        if vi is not None:
+            vv=vi[vi.date>=ed].reset_index(drop=True)
+            rec["vnindex20"]=(float(vv.iloc[19].close)/float(vv.iloc[0].open)-1)*100 if len(vv)>=20 else np.nan
+            rec["alpha_vnindex20"]=rec["ret20"]-rec["vnindex20"] if pd.notna(rec["ret20"]) and pd.notna(rec["vnindex20"]) else np.nan
+                rec["stop_hit"]=reason.startswith("STOP"); rec["t1_hit"]=reason.startswith("T1")
         active[(z["model"],s)]=fut.iloc[min(19,len(fut)-1)].date
         rows.append(rec)
     return pd.DataFrame(rows)
