@@ -86,3 +86,5 @@ def main():
     pd.DataFrame(rows).to_csv("BACKTEST_STAT_BENCHMARK.csv",index=False,encoding="utf-8-sig")
 
 if __name__=="__main__":main()
+
+# trigger statistical audit
