@@ -101,3 +101,5 @@ def main():
     print("\nRULE: accept experimental target only if avg planned P/L higher AND stop-hit not higher in BOTH Development and Holdout. No live bot changes.")
 
 if __name__=="__main__":main()
+
+# trigger final validation
