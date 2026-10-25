@@ -189,7 +189,7 @@ def exits(tr,raw):
             vv=vi[vi.date>=ed].reset_index(drop=True)
             rec["vnindex20"]=(float(vv.iloc[19].close)/float(vv.iloc[0].open)-1)*100 if len(vv)>=20 else np.nan
             rec["alpha_vnindex20"]=rec["ret20"]-rec["vnindex20"] if pd.notna(rec["ret20"]) and pd.notna(rec["vnindex20"]) else np.nan
-                rec["stop_hit"]=reason.startswith("STOP"); rec["t1_hit"]=reason.startswith("T1")
+        rec["stop_hit"]=reason.startswith("STOP"); rec["t1_hit"]=reason.startswith("T1")
         active[(z["model"],s)]=fut.iloc[min(19,len(fut)-1)].date
         rows.append(rec)
     return pd.DataFrame(rows)
