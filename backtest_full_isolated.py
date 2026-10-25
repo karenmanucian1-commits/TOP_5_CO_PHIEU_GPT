@@ -8,7 +8,8 @@ import ai_decision_top5 as dec
 from send_top5_advanced_v3_7_telegram import action_label
 
 ROOT=Path(__file__).resolve().parent
-START=pd.Timestamp("2023-01-01"); END=pd.Timestamp("2026-10-23")\nDEV_END=pd.Timestamp("2026-04-23"); HOLD_START=pd.Timestamp("2026-04-24")
+START=pd.Timestamp("2023-01-01"); END=pd.Timestamp("2026-10-23")
+DEV_END=pd.Timestamp("2026-04-23"); HOLD_START=pd.Timestamp("2026-04-24")
 FEE=.004  # locked total round-trip cost (0.4%); full-run trigger
 FEATURES=[
 "RET1","RET5","RET10","RET20","RET60","DIST_MA20","DIST_MA50","MA20_SLOPE5","MA50_SLOPE10","RSI14","VOL_RATIO","VOLATILITY20","RANGE_POS20","RANGE_POS60",
