@@ -237,3 +237,5 @@ def main():
     print(pd.DataFrame(summaries).to_string(index=False)); print(audit)
 
 if __name__=="__main__":main()
+
+# FULL_BACKTEST_TRIGGER
