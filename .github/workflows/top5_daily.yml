@@ -271,3 +271,5 @@ jobs:
             git push origin HEAD:main
           fi
 
+
+# manual morning rerun 2026-10-27 after EOD freshness fix
