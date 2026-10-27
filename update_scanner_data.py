@@ -495,7 +495,7 @@ def update_symbol(symbol):
 
     return {
         "data": combined,
-        "status": "UPDATED",
+        "status": "UPDATED" if added_rows > 0 else "NO_NEW_DATA",
         "old_first": old_first,
         "old_last": old_last,
         "new_last": new_last,
