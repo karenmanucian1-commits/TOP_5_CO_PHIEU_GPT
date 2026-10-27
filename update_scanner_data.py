@@ -6,6 +6,12 @@ import argparse
 import pandas as pd
 import kbs_client
 
+# Secondary EOD source: only used when KBS has not published the latest completed bar yet.
+try:
+    from vnstock import Quote
+except Exception:
+    Quote = None
+
 # ============================================================
 # TOP5_AI - UPDATE SCANNER MARKET DATA
 # PAPER / FORWARD DATA UPDATE ONLY
@@ -333,6 +339,30 @@ def update_symbol(symbol):
 
     if not new.empty:
         new = new[new["time"] < today_ts].copy()
+
+    # KBS can lag one completed EOD session in the early morning.
+    # If its newest bar is older than the previous weekday, retry via VCI.
+    expected_eod = date.today() - timedelta(days=1)
+    while expected_eod.weekday() >= 5:
+        expected_eod -= timedelta(days=1)
+
+    kbs_last = new["time"].max().date() if not new.empty else None
+    if (kbs_last is None or kbs_last < expected_eod) and Quote is not None:
+        try:
+            vci = Quote(symbol=symbol, source="VCI").history(
+                start=fetch_start.isoformat(),
+                end=END_DATE.isoformat(),
+                interval="1D",
+            )
+            vci = normalize_history(vci)
+            if not vci.empty:
+                vci = vci[vci["time"] < today_ts].copy()
+                vci_last = vci["time"].max().date()
+                if kbs_last is None or vci_last > kbs_last:
+                    new = vci
+                    print(f" [VCI fallback -> {vci_last}]", end="")
+        except Exception as e:
+            print(f" [VCI fallback error: {e}]", end="")
 
     # --------------------------------------------------------
     # IMPORTANT SAFETY
