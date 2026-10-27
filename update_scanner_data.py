@@ -990,14 +990,16 @@ if results:
     )
 
     today = date.today()
+    # Python weekday: Monday=0 ... Sunday=6.
+    # Morning scan must use the immediately preceding completed session.
     if today.weekday() == 0:
-        expected_eod = today - timedelta(days=3)
-    elif today.weekday() <= 4:
-        expected_eod = today - timedelta(days=1)
+        expected_eod = today - timedelta(days=3)  # Friday
+    elif 1 <= today.weekday() <= 4:
+        expected_eod = today - timedelta(days=1)  # previous weekday
     elif today.weekday() == 5:
-        expected_eod = today - timedelta(days=1)
+        expected_eod = today - timedelta(days=1)  # Friday
     else:
-        expected_eod = today - timedelta(days=2)
+        expected_eod = today - timedelta(days=2)  # Friday
 
     newest_market_date = latest_dates.max().date()
     print(f"Expected EOD date  : {expected_eod}")
