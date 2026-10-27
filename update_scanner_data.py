@@ -32,7 +32,7 @@ CACHE_DIR.mkdir(exist_ok=True)
 # CONFIG
 # ------------------------------------------------------------
 
-END_DATE = date.today()
+END_DATE = date.today() + timedelta(days=1)
 
 # Neu mot ma CHUA co cache thi khong tu dong tao
 # cache ngan 500 ngay nua.
@@ -958,6 +958,24 @@ if results:
         f"Newest market date : "
         f"{latest_dates.max().date()}"
     )
+
+    today = date.today()
+    if today.weekday() == 0:
+        expected_eod = today - timedelta(days=3)
+    elif today.weekday() <= 4:
+        expected_eod = today - timedelta(days=1)
+    elif today.weekday() == 5:
+        expected_eod = today - timedelta(days=1)
+    else:
+        expected_eod = today - timedelta(days=2)
+
+    newest_market_date = latest_dates.max().date()
+    print(f"Expected EOD date  : {expected_eod}")
+    if newest_market_date < expected_eod:
+        raise RuntimeError(
+            f"STALE EOD DATA: newest={newest_market_date}, expected>={expected_eod}. "
+            "Stop before scanner/Telegram."
+        )
 
 print("\nDA TAO:")
 print("- scanner_update_report.csv")
