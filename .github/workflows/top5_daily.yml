@@ -99,6 +99,10 @@ jobs:
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python build_scanner_dataset_v2.py
 
+      - name: Verify latest completed EOD
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
+        run: python validate_latest_eod.py
+
       - name: Scan TOP 5
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python daily_scanner_v2.py
