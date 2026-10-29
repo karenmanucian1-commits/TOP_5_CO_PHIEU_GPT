@@ -1,6 +1,10 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 import pandas as pd
+
+VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+TODAY_VN = datetime.now(VN_TZ).date()
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "scanner_dataset_v2.csv"
@@ -17,7 +21,7 @@ dataset_date = dataset_date.date()
 # Hard rule for the morning EOD pipeline:
 # require the immediately preceding weekday. A data provider is NOT allowed
 # to redefine an older bar as "latest" and let stale Telegram pass.
-expected = date.today() - timedelta(days=1)
+expected = TODAY_VN - timedelta(days=1)
 while expected.weekday() >= 5:
     expected -= timedelta(days=1)
 
