@@ -133,9 +133,7 @@ jobs:
           path: |
             TOP5_V2_TODAY.csv
             scanner_dataset_v2.csv
-          key: v2-eod-files-${{ github.run_id }}
-          restore-keys: |
-            v2-eod-files-
+          key: v2-eod-files-clean-2026-10-28
 
       - name: Verify V2 morning EOD files for midday
         if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
@@ -217,9 +215,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: TOP5_ADVANCED_V3.csv
-          key: v3-eod-top-${{ github.run_id }}
-          restore-keys: |
-            v3-eod-top-
+          key: v3-eod-top-clean-2026-10-28
 
       - name: Verify V3 morning TOP exists for midday
         if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
