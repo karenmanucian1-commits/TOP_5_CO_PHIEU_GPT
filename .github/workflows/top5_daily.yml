@@ -147,12 +147,22 @@ jobs:
           test -f scanner_dataset_v2.csv || { echo "ERROR: No completed EOD scanner dataset found."; exit 1; }
           echo "V2 completed-EOD files restored for midday."
 
-      - name: Midday Decision - keep morning Frozen V2 TOP5
+      - name: Build Vietcap midday session snapshot
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        run: python update_midday_snapshot.py
+
+      - name: Rebuild V2 dataset with current morning session
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        run: |
+          python build_scanner_dataset_v2.py
+          python daily_scanner_v2.py
+
+      - name: Send V2 midday rescan to Telegram
         if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: python midday_decision_top5.py
+        run: python ai_decision_top5.py
       # =========================================================
       # SAVE UPDATED CACHE
       # =========================================================
@@ -253,12 +263,12 @@ jobs:
           path: TOP5_ADVANCED_V3.csv
           key: v3-eod-top-${{ github.run_id }}
 
-      - name: Run V3.7 Midday realtime - after V2
+      - name: Run V3.7 Midday rescan on current morning session
         if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: python run_top5_advanced_v3_7.py midday
+        run: python run_top5_advanced_v3_7.py morning
 
       - name: Capture Forward Test midday signals
         if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
