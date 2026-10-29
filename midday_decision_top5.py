@@ -123,9 +123,18 @@ def main():
     print("=" * 70)
 
     candidates, signal_date = build_midday_decision()
-    message = decision.build_message(candidates, signal_date)
-
     now = datetime.now(VN_TZ)
+    if not candidates:
+        message = (
+            "🤖 CỔ PHIẾU ĐẠT CHUẨN GPT\n\n"
+            f"📅 Nền EOD: {signal_date.strftime('%d/%m/%Y')}\n"
+            f"🕒 Kiểm tra giữa phiên: {now.strftime('%H:%M %d/%m/%Y')}\n\n"
+            "🚫 Danh sách EOD nền hiện không có mã đủ chuẩn để cập nhật điểm vào giữa phiên.\n"
+            "ℹ️ Không dùng Market Score từ nến nửa phiên và không ép mã."
+        )
+    else:
+        message = decision.build_message(candidates, signal_date)
+
     header = (
         "🤖 CỔ PHIẾU ĐẠT CHUẨN GPT\n"
         "🔒 Danh sách đạt chuẩn: EOD hoàn chỉnh\n"
