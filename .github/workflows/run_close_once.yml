@@ -1,0 +1,11 @@
+name: RUN CLOSE ONCE
+on:
+  push:
+    branches: [main]
+jobs:
+  close:
+    if: contains(github.event.head_commit.message, '[RUN-CLOSE]')
+    uses: ./.github/workflows/top5_daily.yml
+    with:
+      mode: close
+    secrets: inherit
