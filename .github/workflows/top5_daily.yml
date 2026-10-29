@@ -1,9 +1,6 @@
 name: TOP 5 Cổ Phiếu Hàng Ngày GPT
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       mode:
@@ -95,19 +92,19 @@ jobs:
       # =========================================================
 
       - name: Update market data
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python update_scanner_data.py
 
       - name: Build scanner dataset
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python build_scanner_dataset_v2.py
 
       - name: Verify latest completed EOD
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python validate_latest_eod.py
 
       - name: Scan TOP 5
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python daily_scanner_v2.py
 
       # Legacy TOP5 forward evaluator disabled.
@@ -116,20 +113,20 @@ jobs:
       # will be added separately after both final decision layers are stable.
 
       - name: Send TOP 5 to Telegram
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python send_top5_telegram_pro.py
       - name: Send AI Decision to Telegram
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python ai_decision_top5.py
 
       - name: Restore V2 morning EOD files for midday
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]')) || (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
         id: v2-eod-cache
         uses: actions/cache/restore@v4
         with:
@@ -141,14 +138,28 @@ jobs:
             v2-eod-files-
 
       - name: Verify V2 morning EOD files for midday
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]')) || (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
         run: |
           test -f TOP5_V2_TODAY.csv || { echo "ERROR: No V2 morning TOP5 cache found. Run morning once to seed midday."; exit 1; }
           test -f scanner_dataset_v2.csv || { echo "ERROR: No completed EOD scanner dataset found."; exit 1; }
           echo "V2 completed-EOD files restored for midday."
+          python - <<'PY'
+          import pandas as pd
+          from datetime import datetime, timedelta
+          from zoneinfo import ZoneInfo
+          today=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).date()
+          expected=today-timedelta(days=1)
+          while expected.weekday()>=5:
+              expected-=timedelta(days=1)
+          d=pd.read_csv("TOP5_V2_TODAY.csv")
+          got=pd.to_datetime(d["date"],errors="coerce").max().date() if len(d) else None
+          print("MIDDAY EOD CHECK:",got,"EXPECTED:",expected)
+          if got != expected:
+              raise SystemExit(f"BLOCK MIDDAY: EOD cache date {got} != {expected}")
+          PY
 
       - name: Midday Decision - EOD base plus current-session execution
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]')) || (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
@@ -158,7 +169,7 @@ jobs:
       # =========================================================
 
       - name: Save V2 completed EOD files for midday
-        if: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5')) && success() }}
+        if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5')) && success() }}
         uses: actions/cache/save@v4
         with:
           path: |
@@ -167,7 +178,7 @@ jobs:
           key: v2-eod-files-${{ github.run_id }}
 
       - name: Save updated stock cache
-        if: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5')) && success() }}
+        if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5')) && success() }}
         uses: actions/cache/save@v4
         with:
           path: stock_cache
@@ -178,7 +189,7 @@ jobs:
       # =========================================================
 
       - name: Save TOP5 history to repository
-        if: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5')) && success() }}
+        if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5')) && success() }}
         run: |
           git config user.name "TOP5 AI Bot"
           git config user.email "top5-ai-bot@users.noreply.github.com"
@@ -201,7 +212,7 @@ jobs:
       # =========================================================
 
       - name: Restore V3 morning TOP for midday
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]')) || (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
         id: v3-top-cache
         uses: actions/cache/restore@v4
         with:
@@ -211,29 +222,36 @@ jobs:
             v3-eod-top-
 
       - name: Verify V3 morning TOP exists for midday
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]')) || (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
         run: |
           test -f TOP5_ADVANCED_V3.csv || { echo "ERROR: No V3 morning EOD TOP cache found. Stop V3 midday; Frozen V2 already completed."; exit 1; }
           echo "V3 morning EOD TOP restored:"
           cat TOP5_ADVANCED_V3.csv
+          python - <<'PY'
+          import pandas as pd
+          d=pd.read_csv("TOP5_ADVANCED_V3.csv")
+          if d.empty:
+              raise SystemExit("BLOCK MIDDAY V3: restored EOD TOP is empty/corrupted")
+          print("V3 EOD rows:",len(d))
+          PY
 
       - name: Restore V3 financial database
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python restore_financial_db.py
 
       - name: Run V3.7 Morning - after V2
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python run_top5_advanced_v3_7.py morning
 
       - name: Capture Forward Test BUY signals
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: python forward_test.py capture morning
 
       - name: Persist Forward Test BUY ledger
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5') }}
         run: |
           git config user.name "Forward Test Bot"
           git config user.email "forward-test-bot@users.noreply.github.com"
@@ -247,25 +265,25 @@ jobs:
           fi
 
       - name: Save V3 morning TOP for midday
-        if: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]') == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5')) && success() }}
+        if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.mode == 'morning') || (github.event_name == 'schedule' && github.event.schedule != '31 4 * * 1-5')) && success() }}
         uses: actions/cache/save@v4
         with:
           path: TOP5_ADVANCED_V3.csv
           key: v3-eod-top-${{ github.run_id }}
 
       - name: Run V3.7 Midday - EOD gate plus current-session execution
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]')) || (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python run_top5_advanced_v3_7.py midday
 
       - name: Capture Forward Test midday signals
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]')) || (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
         run: python forward_test.py capture midday
 
       - name: Persist Forward Test midday ledger
-        if: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[MIDDAY-TEST]')) || (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '31 4 * * 1-5') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'midday') }}
         run: |
           git config user.name "Forward Test Bot"
           git config user.email "forward-test-bot@users.noreply.github.com"
