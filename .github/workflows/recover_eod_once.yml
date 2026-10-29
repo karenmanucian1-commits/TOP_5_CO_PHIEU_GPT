@@ -80,3 +80,13 @@ jobs:
         with:
           path: TOP5_ADVANCED_V3.csv
           key: v3-eod-top-clean-2026-10-28
+      - name: Test V2 midday from clean EOD
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python midday_decision_top5.py
+      - name: Test V3 midday from clean EOD
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python run_top5_advanced_v3_7.py midday
