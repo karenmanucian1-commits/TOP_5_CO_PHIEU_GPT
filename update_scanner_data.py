@@ -3,14 +3,10 @@ from datetime import date, timedelta
 import time
 import shutil
 import argparse
+import requests
 import pandas as pd
 import kbs_client
 
-# Secondary EOD source: only used when KBS has not published the latest completed bar yet.
-try:
-    from vnstock import Quote
-except Exception:
-    Quote = None
 
 # ============================================================
 # TOP5_AI - UPDATE SCANNER MARKET DATA
@@ -237,6 +233,48 @@ def normalize_history(df):
 
 
 # ============================================================
+# VIETCAP DIRECT EOD
+# ============================================================
+
+VIETCAP_URL = "https://trading.vietcap.com.vn/api/chart/OHLCChart/gap-chart"
+VIETCAP_HEADERS = {
+    "Referer": "https://trading.vietcap.com.vn/",
+    "Origin": "https://trading.vietcap.com.vn",
+    "User-Agent": "Mozilla/5.0",
+}
+
+def vietcap_history(symbol, count_back=300):
+    payload = {
+        "timeFrame": "ONE_DAY",
+        "symbols": [symbol],
+        "to": int(time.time()) + 86400,
+        "countBack": count_back,
+    }
+    r = requests.post(VIETCAP_URL, headers=VIETCAP_HEADERS, json=payload, timeout=30)
+    r.raise_for_status()
+    raw = r.json()
+    # Vietcap normally returns arrays directly; tolerate a one-item wrapper.
+    if isinstance(raw, list) and raw and isinstance(raw[0], dict):
+        raw = raw[0]
+    if isinstance(raw, dict) and isinstance(raw.get("data"), dict):
+        raw = raw["data"]
+    if not isinstance(raw, dict):
+        return pd.DataFrame()
+    keys = ["t", "o", "h", "l", "c", "v"]
+    if not all(k in raw for k in keys):
+        return pd.DataFrame()
+    n = min(len(raw[k]) for k in keys)
+    if n == 0:
+        return pd.DataFrame()
+    df = pd.DataFrame({
+        "time": pd.to_datetime(raw["t"][:n], unit="s", utc=True)
+            .tz_convert("Asia/Ho_Chi_Minh").tz_localize(None).normalize(),
+        "open": raw["o"][:n], "high": raw["h"][:n], "low": raw["l"][:n],
+        "close": raw["c"][:n], "volume": raw["v"][:n],
+    })
+    return normalize_history(df)
+
+# ============================================================
 # 4. UPDATE ONE SYMBOL
 # ============================================================
 
@@ -340,29 +378,23 @@ def update_symbol(symbol):
     if not new.empty:
         new = new[new["time"] < today_ts].copy()
 
-    # KBS can lag one completed EOD session in the early morning.
-    # If its newest bar is older than the previous weekday, retry via VCI.
+    # KBS can lag in the early morning. If so, call Vietcap directly.
     expected_eod = date.today() - timedelta(days=1)
     while expected_eod.weekday() >= 5:
         expected_eod -= timedelta(days=1)
 
     kbs_last = new["time"].max().date() if not new.empty else None
-    if (kbs_last is None or kbs_last < expected_eod) and Quote is not None:
+    if kbs_last is None or kbs_last < expected_eod:
         try:
-            vci = Quote(symbol=symbol, source="VCI").history(
-                start=fetch_start.isoformat(),
-                end=END_DATE.isoformat(),
-                interval="1D",
-            )
-            vci = normalize_history(vci)
+            vci = vietcap_history(symbol)
             if not vci.empty:
                 vci = vci[vci["time"] < today_ts].copy()
                 vci_last = vci["time"].max().date()
                 if kbs_last is None or vci_last > kbs_last:
                     new = vci
-                    print(f" [VCI fallback -> {vci_last}]", end="")
+                    print(f" [VIETCAP direct -> {vci_last}]", end="")
         except Exception as e:
-            print(f" [VCI fallback error: {e}]", end="")
+            print(f" [VIETCAP direct error: {e}]", end="")
 
     # --------------------------------------------------------
     # IMPORTANT SAFETY
