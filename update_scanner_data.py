@@ -1,5 +1,6 @@
 from pathlib import Path
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 import time
 import shutil
 import argparse
@@ -34,7 +35,9 @@ CACHE_DIR.mkdir(exist_ok=True)
 # CONFIG
 # ------------------------------------------------------------
 
-END_DATE = date.today() + timedelta(days=1)
+VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+TODAY_VN = datetime.now(VN_TZ).date()
+END_DATE = TODAY_VN + timedelta(days=1)
 
 # Neu mot ma CHUA co cache thi khong tu dong tao
 # cache ngan 500 ngay nua.
@@ -352,7 +355,7 @@ def update_symbol(symbol):
     # Midday prices are handled by midday_decision_top5.py.
     # --------------------------------------------------------
 
-    today_ts = pd.Timestamp(date.today())
+    today_ts = pd.Timestamp(TODAY_VN)
 
     # Clean any partial current-day candle left by an older updater.
     if not old.empty:
@@ -379,7 +382,7 @@ def update_symbol(symbol):
         new = new[new["time"] < today_ts].copy()
 
     # KBS can lag in the early morning. If so, call Vietcap directly.
-    expected_eod = date.today() - timedelta(days=1)
+    expected_eod = TODAY_VN - timedelta(days=1)
     while expected_eod.weekday() >= 5:
         expected_eod -= timedelta(days=1)
 
@@ -1021,7 +1024,7 @@ if results:
         f"{latest_dates.max().date()}"
     )
 
-    today = date.today()
+    today = TODAY_VN
     # Python weekday: Monday=0 ... Sunday=6.
     # Morning scan must use the immediately preceding completed session.
     if today.weekday() == 0:
