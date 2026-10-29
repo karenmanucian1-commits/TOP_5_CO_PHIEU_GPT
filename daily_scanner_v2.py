@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import sys
 import joblib
@@ -14,6 +15,9 @@ DATA_FILE = BASE_DIR / "scanner_dataset_v2.csv"
 MODEL_FILE = BASE_DIR / "TOP5_V2_FROZEN_MODEL.joblib"
 OUTPUT_FILE = BASE_DIR / "TOP5_V2_TODAY.csv"
 HISTORY_FILE = BASE_DIR / "TOP5_V2_HISTORY.csv"
+# Lượt 11:35 (quét lại bằng dữ liệu phiên sáng): KHÔNG ghi vào lịch sử EOD chính thức
+if os.environ.get("DATA_SESSION", "").upper() == "MORNING":
+    HISTORY_FILE = BASE_DIR / "TOP5_V2_HISTORY_MIDDAY_TMP.csv"
 # Wide Frozen-V2 shortlist. Final output is NOT limited to a Top N.
 CANDIDATE_POOL_N = 30
 

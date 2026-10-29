@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 
 """
 TOP5 AI - DECISION LAYER
@@ -592,7 +593,9 @@ def build_message(candidates, signal_date):
     lines = [
         "🤖 CỔ PHIẾU ĐẠT CHUẨN GPT",
         "",
-        f"📅 Dữ liệu: {signal_date.strftime('%d/%m/%Y')}",
+        (f"📅 Dữ liệu: PHIÊN SÁNG {signal_date.strftime('%d/%m/%Y')} (quét lại toàn bộ, KL quy đổi cả ngày)"
+         if os.environ.get("DATA_SESSION", "").upper() == "MORNING"
+         else f"📅 Dữ liệu: {signal_date.strftime('%d/%m/%Y')}"),
         f"🕒 Đánh giá lúc: {now.strftime('%H:%M %d/%m/%Y')}",
         f"🌐 Thị trường: {first['market_label']} ({first['market_score']:.1f}/100)",
         "",

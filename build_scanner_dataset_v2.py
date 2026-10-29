@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -9,7 +10,8 @@ import pandas as pd
 BASE_DIR = Path(__file__).resolve().parent
 
 UNIVERSE_FILE = BASE_DIR / "quality_universe.csv"
-CACHE_DIR = BASE_DIR / "stock_cache"
+# Lượt 11:35 trỏ STOCK_CACHE_DIR=stock_cache_midday; mặc định là cache EOD
+CACHE_DIR = Path(os.environ.get("STOCK_CACHE_DIR") or (BASE_DIR / "stock_cache"))
 
 OUTPUT_FILE = BASE_DIR / "scanner_dataset_v2.csv"
 

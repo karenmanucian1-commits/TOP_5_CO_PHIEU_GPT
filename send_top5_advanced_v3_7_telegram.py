@@ -56,11 +56,16 @@ def action_label(x, realtime=False):
 
 def build(mode):
     realtime=mode=="midday"
+    session=mode=="session"          # 11:35: quét lại toàn bộ bằng dữ liệu phiên sáng
     p=ROOT/("TOP5_ADVANCED_V3_REALTIME.csv" if realtime else "TOP5_ADVANCED_V3.csv")
     if not p.exists(): raise RuntimeError("Thieu file ket qua: "+str(p))
     d=pd.read_csv(p)
     title="🚀 CỔ PHIẾU CHẤT LƯỢNG GPT" if not realtime else "🚀 CỔ PHIẾU CHẤT LƯỢNG GPT — REALTIME"
-    lines=[title,datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("🕒 %d/%m/%Y %H:%M"),
+    now_vn=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+    lines=[title]
+    if session:
+        lines.append(f"📅 Dữ liệu: PHIÊN SÁNG {now_vn:%d/%m/%Y} (quét lại toàn bộ, KL quy đổi cả ngày)")
+    lines+=[now_vn.strftime("🕒 %d/%m/%Y %H:%M"),
            "✅ Đã qua Quality Gate — xem HÀNH ĐỘNG để biết điểm mua",""]
     if d.empty:
         lines.append("⛔ Hiện không có cổ phiếu đủ chuẩn mua.")
@@ -105,7 +110,7 @@ def build(mode):
           f"💵 Giá: {f(price)} | Buy: {f(x.buy_low)} – {f(x.buy_high)}",
           f"🛑 Stop: {f(x.stop)}",
           f"🎯 T1: {f(x.target1)} | 🚀 T2: {f(x.target2)}",
-          f"⚖️ R:R hiện tại: 1:{f(rr)}" if realtime else f"⚖️ R:R tại giá EOD: 1:{f(rr)}",
+          f"⚖️ R:R hiện tại: 1:{f(rr)}" if realtime else (f"⚖️ R:R tại giá phiên sáng: 1:{f(rr)}" if session else f"⚖️ R:R tại giá EOD: 1:{f(rr)}"),
           f"📊 Finance {f(x.financial_score,0)} | Trend {f(x.trend_score,0)} | RS {f(x.rs_score,0)} | Flow {f(x.money_flow_score,0)}",
           ""
         ]
@@ -119,6 +124,8 @@ def build(mode):
         else:
             lines += ["━━━━━━━━━━━━━━━━━━━━", "⛔ Hiện không có mã nào còn điểm mua đạt chuẩn realtime."]
         lines.append("📡 Giá thực thi: KBS realtime | Nền chọn mã: phiên EOD hoàn chỉnh")
+    elif session:
+        lines.append(f"📌 Nền chọn mã: quét lại bằng dữ liệu phiên sáng {now_vn:%d/%m/%Y}")
     else:
         lines.append("📌 Nền chọn mã: phiên EOD hoàn chỉnh")
     return "\n".join(lines)

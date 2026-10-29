@@ -63,6 +63,10 @@ def capture(mode="morning"):
                 if not eod.empty and "date" in eod.columns:
                     signal_date=pd.to_datetime(eod["date"].iloc[0]).date().isoformat()
             except Exception as ex: print("EOD date fallback:",ex)
+    elif os.environ.get("DATA_SESSION","").upper()=="MORNING":
+        # 11:35: danh sách được QUÉT LẠI bằng dữ liệu phiên sáng (TOP5_V2_TODAY.csv của lượt này)
+        candidates,_=v2.build_decision()
+        signal_date=now.date().isoformat()
     else:
         import midday_decision_top5 as mid
         candidates,_=mid.build_midday_decision()

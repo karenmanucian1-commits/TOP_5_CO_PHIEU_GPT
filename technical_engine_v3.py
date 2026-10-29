@@ -1,9 +1,11 @@
 from v3_common import *
+import os
+CACHE=Path(os.environ.get("STOCK_CACHE_DIR") or (ROOT/"stock_cache"))
 OUT=ROOT/"TECHNICAL_V3.csv"
 def RSI(c,n=14):
  d=c.diff();u=d.clip(lower=0).rolling(n).mean();q=(-d.clip(upper=0)).rolling(n).mean();rs=u/q.replace(0,np.nan);return 100-100/(1+rs)
 def calc(sym):
- f=ROOT/"stock_cache"/f"{sym}.csv"
+ f=CACHE/f"{sym}.csv"
  if not f.exists():return
  d=pd.read_csv(f);cc=next((x for x in ["close","Close"] if x in d),None);vc=next((x for x in ["volume","Volume"] if x in d),None);hc=next((x for x in ["high","High"] if x in d),None);lc=next((x for x in ["low","Low"] if x in d),None)
  if not cc or len(d)<60:return
