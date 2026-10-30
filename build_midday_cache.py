@@ -39,6 +39,7 @@ KBS_URL = "https://kbbuddywts.kbsec.com.vn/iis-server/investment/stocks/{sym}/da
 MORNING_VOLUME_FRACTION = 0.45
 MIN_COVERAGE = 0.90
 SAMPLES = ("FPT", "VCB", "HPG", "MWG", "TCB")
+BAD = []
 
 
 def fetch_vietcap(symbol):
@@ -58,7 +59,10 @@ def fetch_vietcap(symbol):
     return pd.DataFrame({
         "time": pd.to_datetime(pd.Series(x["t"][:n]).astype("int64"), unit="s", utc=True)
                   .dt.tz_convert("Asia/Ho_Chi_Minh").dt.tz_localize(None).dt.normalize(),
-        "open": x["o"][:n], "high": x["h"][:n], "low": x["l"][:n], "close": x["c"][:n], "volume": x["v"][:n]})
+        # Vietcap trả giá theo ĐỒNG (vd 26500) -> đổi về NGHÌN ĐỒNG (26.5) cho cùng đơn vị stock_cache
+        "open": pd.Series(x["o"][:n], dtype=float) / 1000, "high": pd.Series(x["h"][:n], dtype=float) / 1000,
+        "low": pd.Series(x["l"][:n], dtype=float) / 1000, "close": pd.Series(x["c"][:n], dtype=float) / 1000,
+        "volume": x["v"][:n]})
 
 
 def fetch_kbs(symbol, today):
@@ -93,6 +97,7 @@ def main():
     shutil.copytree(EOD_CACHE, MIDDAY_CACHE)
 
     updated, missing, src_count = 0, [], {"VCI": 0, "KBS": 0}
+    BAD.clear()
     vci_fail_streak = 0
     for s in syms:
         p = MIDDAY_CACHE / f"{s}.csv"
@@ -120,6 +125,14 @@ def main():
             missing.append(s)
             continue
         row = row.copy()
+        old_chk = pd.read_csv(p)
+        prev_close = float(pd.to_numeric(old_chk["close"], errors="coerce").dropna().iloc[-1])
+        chg = float(row["close"].iloc[0]) / prev_close - 1 if prev_close > 0 else 0
+        if abs(chg) > 0.16:                                # vượt biên độ tối đa (UPCOM ±15%) -> sai đơn vị/dữ liệu
+            print(f"BỎ {s}: giá phiên sáng {row['close'].iloc[0]} lệch {chg:+.0%} so với EOD {prev_close} (sai dữ liệu)")
+            BAD.append(s)
+            missing.append(s)
+            continue
         raw_vol = float(row["volume"].iloc[0])
         row["volume"] = round(raw_vol / MORNING_VOLUME_FRACTION)
         old = pd.read_csv(p)
@@ -131,7 +144,7 @@ def main():
         updated += 1
         src_count[src] += 1
         if s in SAMPLES:
-            print(f"SAMPLE {s} [{src}]: {today:%d/%m/%Y} close={row.close.iloc[0]} "
+            print(f"SAMPLE {s} [{src}]: {today:%d/%m/%Y} close={row.close.iloc[0]} (EOD trước {prev_close}, {chg:+.2%}) "
                   f"KL phiên sáng={raw_vol:,.0f} -> quy đổi cả ngày={row.volume.iloc[0]:,.0f}")
         time.sleep(0.08)
 
@@ -148,6 +161,8 @@ def main():
         f = MIDDAY_CACHE / f"{s}.csv"
         if f.exists():
             f.unlink()
+    if len(BAD) > 0.05 * len(syms):
+        raise SystemExit(f"BLOCK MIDDAY: {len(BAD)} mã có giá phiên sáng bất thường – nghi sai đơn vị dữ liệu, không gửi tin.")
     if cov < MIN_COVERAGE:
         raise SystemExit(f"BLOCK MIDDAY: chỉ có {cov:.0%} mã có nến phiên sáng {today:%d/%m} (cần ≥ {MIN_COVERAGE:.0%}).")
     print("MIDDAY CACHE OK ->", MIDDAY_CACHE)

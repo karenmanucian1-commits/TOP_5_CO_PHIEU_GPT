@@ -160,6 +160,13 @@ jobs:
           print("Coverage:",info["coverage"],"| sources:",info["sources"])
           if got != today:
               raise SystemExit(f"BLOCK MIDDAY: scanner date {got} != today {today}")
+          import send_top5_telegram_pro as pro
+          s=pd.read_csv("scanner_dataset_v2.csv"); s["date"]=pd.to_datetime(s["date"]).dt.date
+          ds=sorted(s["date"].unique())[-2:]
+          sc={d: pro.market_score(s[s["date"]==d].iloc[0]) for d in ds}
+          print("Market Score:", {str(k): v for k, v in sc.items()})
+          if len(ds)==2 and abs(sc[ds[1]]-sc[ds[0]])>25:
+              raise SystemExit(f"BLOCK MIDDAY: Market Score nhảy bất thường {sc[ds[0]]} -> {sc[ds[1]]}, nghi sai dữ liệu phiên sáng")
           PY
 
       - name: Scan V2 - morning session
