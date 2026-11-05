@@ -80,93 +80,95 @@ def fetch_kbs(symbol, today):
     return q[["time", "open", "high", "low", "close", "volume"]]
 
 
+def fetch_kbs_snapshot(symbols):
+    """Lay snapshot KBS theo lo de tao nen phien sang nhanh, khong goi tung ma."""
+    url = "https://kbbuddywts.kbsec.com.vn/iis-server/investment/stock/iss"
+    headers = {"User-Agent": HEADERS["User-Agent"], "Content-Type": "application/json", "x-lang": "vi"}
+    rows = []
+    batch_size = 50
+    for i in range(0, len(symbols), batch_size):
+        batch = symbols[i:i+batch_size]
+        r = requests.post(url, headers=headers, json={"code": ",".join(batch)}, timeout=(8, 20))
+        r.raise_for_status()
+        x = r.json()
+        part = x if isinstance(x, list) else x.get("data", [])
+        if part:
+            rows.extend(part)
+        time.sleep(0.05)
+    if not rows:
+        return {}
+    q = pd.DataFrame(rows).rename(columns={"SB":"symbol","CP":"close","OP":"open","HI":"high","LO":"low","TT":"volume"})
+    if "symbol" not in q.columns or "close" not in q.columns:
+        return {}
+    q["symbol"] = q["symbol"].astype(str).str.strip().str.upper()
+    for col in ("open","high","low","close"):
+        q[col] = pd.to_numeric(q.get(col), errors="coerce") / 1000.0
+    q["volume"] = pd.to_numeric(q.get("volume"), errors="coerce")
+    q = q.dropna(subset=["symbol","open","high","low","close","volume"])
+    q = q[(q["close"] > 0) & (q["volume"] > 0)]
+    return {str(r.symbol): r for r in q[["symbol","open","high","low","close","volume"]].itertuples(index=False)}
+
 def main():
     now = datetime.now(VN_TZ)
     today = pd.Timestamp(now.date())
     print("=" * 70)
     print(f"Run: {now:%H:%M}")
-    print("Data session: MORNING SESSION")
+    print("Data session: MORNING SESSION - KBS SNAPSHOT")
     print(f"Data date: {today:%d/%m/%Y}")
     print("=" * 70)
     if now.weekday() >= 5:
-        raise SystemExit("BLOCK MIDDAY: hôm nay là cuối tuần, không có phiên sáng.")
+        raise SystemExit("BLOCK MIDDAY: cuoi tuan.")
 
-    syms = pd.read_csv(UNIVERSE).iloc[:, 0].astype(str).str.strip().str.upper().drop_duplicates().tolist()
+    syms = pd.read_csv(UNIVERSE).iloc[:,0].astype(str).str.strip().str.upper().drop_duplicates().tolist()
     if MIDDAY_CACHE.exists():
         shutil.rmtree(MIDDAY_CACHE)
     shutil.copytree(EOD_CACHE, MIDDAY_CACHE)
 
-    updated, missing, src_count = 0, [], {"VCI": 0, "KBS": 0}
-    BAD.clear()
-    vci_fail_streak = 0
+    snap = fetch_kbs_snapshot(syms)
+    print(f"KBS snapshot: {len(snap)}/{len(syms)}")
+    updated, missing, bad = 0, [], []
     for s in syms:
         p = MIDDAY_CACHE / f"{s}.csv"
-        if not p.exists():
-            missing.append(s)
-            continue
-        row, src = pd.DataFrame(), None
-        if vci_fail_streak < 10:
-            try:
-                q = fetch_vietcap(s)
-                row = q[q.time == today].tail(1)
-                src = "VCI"
-                vci_fail_streak = 0 if not row.empty else vci_fail_streak
-            except Exception as e:  # noqa: BLE001
-                vci_fail_streak += 1
-                print(f"VCI lỗi {s}: {type(e).__name__}")
-        if row.empty:
-            try:
-                q = fetch_kbs(s, today)
-                row = q[q.time == today].tail(1)
-                src = "KBS"
-            except Exception as e:  # noqa: BLE001
-                print(f"KBS lỗi {s}: {type(e).__name__}")
-        if row.empty:
-            missing.append(s)
-            continue
-        row = row.copy()
-        old_chk = pd.read_csv(p)
-        prev_close = float(pd.to_numeric(old_chk["close"], errors="coerce").dropna().iloc[-1])
-        chg = float(row["close"].iloc[0]) / prev_close - 1 if prev_close > 0 else 0
-        if abs(chg) > 0.16:                                # vượt biên độ tối đa (UPCOM ±15%) -> sai đơn vị/dữ liệu
-            print(f"BỎ {s}: giá phiên sáng {row['close'].iloc[0]} lệch {chg:+.0%} so với EOD {prev_close} (sai dữ liệu)")
-            BAD.append(s)
-            missing.append(s)
-            continue
-        raw_vol = float(row["volume"].iloc[0])
-        row["volume"] = round(raw_vol / MORNING_VOLUME_FRACTION)
+        r = snap.get(s)
+        if not p.exists() or r is None:
+            missing.append(s); continue
         old = pd.read_csv(p)
         old["time"] = pd.to_datetime(old["time"], errors="coerce").dt.normalize()
-        old = old[old.time < today]                       # bỏ mọi nến hôm nay cũ (nếu có)
-        out = pd.concat([old, row], ignore_index=True).sort_values("time")
+        old = old.dropna(subset=["time"]).sort_values("time")
+        if old.empty:
+            missing.append(s); continue
+        prev = old[old.time < today]
+        if prev.empty:
+            missing.append(s); continue
+        prev_close = float(pd.to_numeric(prev["close"],errors="coerce").dropna().iloc[-1])
+        chg = float(r.close)/prev_close-1 if prev_close>0 else 0
+        if abs(chg) > 0.16:
+            bad.append(s); missing.append(s); continue
+        row = pd.DataFrame([{
+            "time": today, "open": float(r.open), "high": float(r.high),
+            "low": float(r.low), "close": float(r.close),
+            "volume": round(float(r.volume)/MORNING_VOLUME_FRACTION)
+        }])
+        out = pd.concat([prev,row],ignore_index=True).sort_values("time")
         out["time"] = pd.to_datetime(out["time"]).dt.strftime("%Y-%m-%d")
-        out.to_csv(p, index=False, encoding="utf-8-sig")
+        out.to_csv(p,index=False,encoding="utf-8-sig")
         updated += 1
-        src_count[src] += 1
-        if s in SAMPLES:
-            print(f"SAMPLE {s} [{src}]: {today:%d/%m/%Y} close={row.close.iloc[0]} (EOD trước {prev_close}, {chg:+.2%}) "
-                  f"KL phiên sáng={raw_vol:,.0f} -> quy đổi cả ngày={row.volume.iloc[0]:,.0f}")
-        time.sleep(0.08)
 
-    cov = updated / max(len(syms), 1)
-    print(f"MIDDAY UPDATED: {updated}/{len(syms)} ({cov:.0%}) | nguồn VCI {src_count['VCI']} / KBS {src_count['KBS']} "
-          f"| thiếu {len(missing)}: {', '.join(missing[:30])}")
-    info = {"session": "MORNING", "data_date": today.strftime("%Y-%m-%d"), "run_time": now.strftime("%Y-%m-%d %H:%M"),
-            "updated": updated, "universe": len(syms), "coverage": round(cov, 4),
-            "volume_fraction": MORNING_VOLUME_FRACTION, "sources": src_count}
-    INFO_FILE.write_text(json.dumps(info, ensure_ascii=False, indent=1), encoding="utf-8")
-
-    # Mã không có nến hôm nay: bỏ khỏi bộ phiên sáng để mặt cắt thị trường ngày hôm nay chỉ gồm mã có dữ liệu thật
     for s in missing:
-        f = MIDDAY_CACHE / f"{s}.csv"
-        if f.exists():
-            f.unlink()
-    if len(BAD) > 0.05 * len(syms):
-        raise SystemExit(f"BLOCK MIDDAY: {len(BAD)} mã có giá phiên sáng bất thường – nghi sai đơn vị dữ liệu, không gửi tin.")
-    if cov < MIN_COVERAGE:
-        raise SystemExit(f"BLOCK MIDDAY: chỉ có {cov:.0%} mã có nến phiên sáng {today:%d/%m} (cần ≥ {MIN_COVERAGE:.0%}).")
-    print("MIDDAY CACHE OK ->", MIDDAY_CACHE)
+        p=MIDDAY_CACHE/f"{s}.csv"
+        if p.exists(): p.unlink()
 
+    cov=updated/max(len(syms),1)
+    info={"session":"MORNING","data_date":today.strftime("%Y-%m-%d"),"run_time":now.strftime("%Y-%m-%d %H:%M"),
+          "updated":updated,"universe":len(syms),"coverage":round(cov,4),
+          "volume_fraction":MORNING_VOLUME_FRACTION,"sources":{"KBS_SNAPSHOT":updated},"bad":len(bad)}
+    INFO_FILE.write_text(json.dumps(info,ensure_ascii=False,indent=1),encoding="utf-8")
+    print(f"MIDDAY UPDATED: {updated}/{len(syms)} ({cov:.1%}) | missing={len(missing)} | bad={len(bad)}")
+    if len(bad) > 0.05*len(syms):
+        raise SystemExit(f"BLOCK MIDDAY: {len(bad)} ma gia bat thuong.")
+    if cov < MIN_COVERAGE:
+        raise SystemExit(f"BLOCK MIDDAY: coverage {cov:.1%} < {MIN_COVERAGE:.0%}.")
+    print("MIDDAY CACHE OK ->",MIDDAY_CACHE)
 
 if __name__ == "__main__":
     sys.exit(main())
