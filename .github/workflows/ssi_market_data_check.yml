@@ -7,7 +7,7 @@ permissions: {}
 jobs:
   connection:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 10
     env:
       SSI_API_KEY: ${{ secrets.SSI_API_KEY }}
       SSI_API_SECRET: ${{ secrets.SSI_API_SECRET }}
@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install pandas ssi-sdk==3.3.2
+      - run: pip install -r requirements.txt
       - name: Check daily, morning and benchmark candles
         run: |
           python3 - <<'PY'
@@ -32,6 +32,27 @@ jobs:
               bar = ssi_client.morning_bar(symbol, "2026-10-02")
               assert bar and bar["volume"] > 0, f"{symbol}: no morning volume"
               print(symbol, bar)
+          PY
+      - name: Validate scanner entry points and check morning coverage sample
+        run: |
+          python -m py_compile ssi_client.py build_midday_cache.py update_scanner_data.py forward_test.py
+          python - <<'PY'
+          import time
+          import pandas as pd
+          import ssi_client
+
+          symbols = pd.read_csv("quality_universe.csv").iloc[:, 0].dropna().drop_duplicates()
+          sample = symbols.sample(n=min(40, len(symbols)), random_state=2026)
+          hits = 0
+          for symbol in sample:
+              bar = ssi_client.morning_bar(str(symbol), "2026-10-02")
+              if bar:
+                  assert bar["low"] <= bar["open"] <= bar["high"]
+                  assert bar["low"] <= bar["close"] <= bar["high"]
+                  hits += 1
+              time.sleep(0.7)
+          print(f"Morning coverage sample: {hits}/{len(sample)}")
+          assert hits >= 0.90 * len(sample)
           PY
       - name: Authenticate and read SSI market data
         run: |
