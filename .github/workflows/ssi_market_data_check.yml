@@ -35,7 +35,7 @@ jobs:
           PY
       - name: Validate scanner entry points and check morning coverage sample
         run: |
-          python -m py_compile ssi_client.py build_midday_cache.py update_scanner_data.py forward_test.py
+          python -m py_compile *.py
           python - <<'PY'
           import time
           import pandas as pd

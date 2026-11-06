@@ -123,7 +123,7 @@ def build(mode):
             lines += ["━━━━━━━━━━━━━━━━━━━━", "🟢 CÒN MUA ĐƯỢC NGAY: "+", ".join(buy_now)]
         else:
             lines += ["━━━━━━━━━━━━━━━━━━━━", "⛔ Hiện không có mã nào còn điểm mua đạt chuẩn realtime."]
-        lines.append("📡 Giá thực thi: KBS realtime | Nền chọn mã: phiên EOD hoàn chỉnh")
+        lines.append("📡 Giá thực thi: SSI (nến phút) | Nền chọn mã: phiên EOD hoàn chỉnh")
     elif session:
         lines.append(f"📌 Nền chọn mã: quét lại bằng dữ liệu phiên sáng {now_vn:%d/%m/%Y}")
     else:

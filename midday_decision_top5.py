@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """Midday execution layer.
 Frozen V2 eligibility/price plan comes ONLY from the latest completed EOD.
-KBS realtime is used ONLY to update current price, current R:R and action state.
+SSI realtime is used ONLY to update current price, current R:R and action state.
 """
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import pandas as pd
 import ai_decision_top5 as decision
-import kbs_client
+import ssi_client
 import send_top5_telegram_pro as pro
 
 VN_TZ = timezone(timedelta(hours=7))
@@ -53,26 +53,14 @@ def apply_realtime_execution(candidates):
         return candidates
 
     symbols = [str(c["symbol"]).strip().upper() for c in candidates]
-    print("KBS realtime request:", ",".join(symbols))
+    print("SSI realtime request:", ",".join(symbols))
 
-    quotes = kbs_client.gia_hien_tai(symbols)
-    if quotes is None or quotes.empty:
-        raise RuntimeError(
-            "KBS realtime price board khong tra du lieu. "
-            "DUNG MIDDAY DECISION; khong fallback ve gia EOD."
-        )
-
-    quote_map = {}
-    for _, q in quotes.iterrows():
-        symbol = str(q.get("symbol", "")).strip().upper()
-        price = pro.safe_float(q.get("price"))
-        if symbol and not pd.isna(price) and price > 0:
-            quote_map[symbol] = price
+    quote_map = ssi_client.latest_prices(symbols)
 
     missing = [s for s in symbols if s not in quote_map]
     if missing:
         raise RuntimeError(
-            "Thieu gia realtime KBS cho: " + ", ".join(missing) +
+            "Thieu gia realtime SSI cho: " + ", ".join(missing) +
             ". DUNG MIDDAY DECISION; khong fallback ve gia EOD."
         )
 
@@ -102,7 +90,7 @@ def apply_realtime_execution(candidates):
 
         print(
             f"{symbol}: EOD {pro.fmt_price(eod_close)} -> "
-            f"KBS REALTIME {pro.fmt_price(live)} | "
+            f"SSI REALTIME {pro.fmt_price(live)} | "
             f"RR now 1:{c['current_rr1']:.2f}"
         )
 
@@ -119,7 +107,7 @@ def build_midday_decision():
 def main():
     print("=" * 70)
     print("TOP5 AI - MIDDAY DECISION")
-    print("Eligibility = completed EOD | Execution price = KBS realtime")
+    print("Eligibility = completed EOD | Execution price = SSI realtime")
     print("=" * 70)
 
     candidates, signal_date = build_midday_decision()
@@ -138,7 +126,7 @@ def main():
     header = (
         "🤖 CỔ PHIẾU ĐẠT CHUẨN GPT\n"
         "🔒 Danh sách đạt chuẩn: EOD hoàn chỉnh\n"
-        "💹 Giá/R:R thực thi: KBS realtime\n"
+        "💹 Giá/R:R thực thi: SSI realtime\n"
         f"🕒 Quote: {now.strftime('%H:%M %d/%m/%Y')}"
     )
     message = message.replace(

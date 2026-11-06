@@ -64,3 +64,14 @@ def morning_bar(symbol, day):
     return dict(open=data.iloc[0]["open"], high=data["high"].max(),
                 low=data["low"].min(), close=data.iloc[-1]["close"],
                 volume=data["volume"].sum())
+
+
+def latest_prices(symbols):
+    now = pd.Timestamp.now(tz="Asia/Ho_Chi_Minh").tz_localize(None)
+    prices = {}
+    for symbol in dict.fromkeys(symbols):
+        data = candles(symbol, now.normalize(), now, morning=True)
+        data = data[data["time"].between(now.normalize(), now) & (data["close"] > 0)]
+        if not data.empty:
+            prices[symbol] = float(data.iloc[-1]["close"])
+    return prices

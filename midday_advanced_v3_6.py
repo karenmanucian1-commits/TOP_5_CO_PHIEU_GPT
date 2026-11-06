@@ -1,50 +1,9 @@
 from pathlib import Path
 from datetime import datetime
-import pandas as pd, numpy as np, requests
+import pandas as pd, numpy as np
+import ssi_client
 
 ROOT=Path(__file__).resolve().parent
-KBS_URL="https://kbbuddywts.kbsec.com.vn/iis-server/investment/stock/iss"
-
-def kbs_prices(symbols):
-    print("[KBS] Dang ket noi truc tiep...", flush=True)
-    try:
-        z=requests.post(
-            KBS_URL,
-            json={"code":",".join(symbols)},
-            headers={"x-lang":"vi","User-Agent":"Mozilla/5.0","Content-Type":"application/json"},
-            timeout=(5,12)
-        )
-        print("[KBS] HTTP",z.status_code,flush=True)
-        z.raise_for_status()
-        obj=z.json()
-    except requests.Timeout:
-        raise RuntimeError("KBS TIMEOUT >12s. DUNG, KHONG DUNG GIA EOD.")
-    except Exception as e:
-        raise RuntimeError(f"KBS CONNECTION ERROR: {type(e).__name__}: {e}")
-
-    # recursively locate quote dictionaries containing SB + CP
-    found=[]
-    def walk(x):
-        if isinstance(x,dict):
-            if ("SB" in x or "symbol" in x or "code" in x) and ("CP" in x or "price" in x or "close" in x):
-                found.append(x)
-            for v in x.values(): walk(v)
-        elif isinstance(x,list):
-            for v in x: walk(v)
-    walk(obj)
-
-    mp={}
-    for x in found:
-        s=str(x.get("SB") or x.get("symbol") or x.get("code") or "").upper().strip()
-        p=x.get("CP",x.get("price",x.get("close")))
-        try:
-            p=float(str(p).replace(",",""))
-            if p>1000: p/=1000.0
-            if s and p>0: mp[s]=p
-        except: pass
-    print(f"[KBS] Lay duoc {len(mp)}/{len(symbols)} gia",flush=True)
-    return mp
-
 def main():
     src=ROOT/"TOP5_ADVANCED_V3.csv"
     print("[1] Doc danh sach EOD:",src,flush=True)
@@ -57,9 +16,9 @@ def main():
     syms=d["symbol"].astype(str).str.upper().tolist()
     print("[2] EOD PASS:",", ".join(syms),flush=True)
 
-    mp=kbs_prices(syms)
+    mp=ssi_client.latest_prices(syms)
     miss=[s for s in syms if s not in mp]
-    if miss: raise RuntimeError("KBS THIEU GIA: "+", ".join(miss)+" -> DUNG, KHONG FALLBACK.")
+    if miss: raise RuntimeError("SSI THIEU GIA: "+", ".join(miss)+" -> DUNG, KHONG FALLBACK.")
 
     d["eod_close"]=d["close"]
     d["current_price"]=[mp[s] for s in syms]
