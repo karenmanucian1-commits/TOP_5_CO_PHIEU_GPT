@@ -1,0 +1,50 @@
+name: SSI Market Data connection check
+on:
+  push:
+    branches: [ssi-market-data-check]
+    paths: [.github/workflows/ssi_market_data_check.yml]
+permissions: {}
+jobs:
+  connection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      SSI_API_KEY: ${{ secrets.SSI_API_KEY }}
+      SSI_API_SECRET: ${{ secrets.SSI_API_SECRET }}
+    steps:
+      - name: Authenticate and read SSI market data
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from urllib.error import HTTPError, URLError
+          from urllib.request import Request, urlopen
+
+          def read(path, *, token=None, body=None):
+              headers = {"Content-Type": "application/json"}
+              if token:
+                  headers["Authorization"] = f"Bearer {token}"
+              req = Request("https://api.ssi.com.vn/api/v3/" + path,
+                            data=body, headers=headers, method="POST" if body else "GET")
+              try:
+                  with urlopen(req, timeout=30) as response:
+                      return json.load(response)
+              except HTTPError as exc:
+                  raise SystemExit(f"SSI {path.split('?')[0]}: HTTP {exc.code}") from None
+              except (URLError, TimeoutError, ValueError):
+                  raise SystemExit("SSI network failure or invalid response") from None
+
+          key, secret = (os.environ.get(name) for name in ("SSI_API_KEY", "SSI_API_SECRET"))
+          if not key or not secret:
+              raise SystemExit("Missing SSI_API_KEY or SSI_API_SECRET in GitHub Actions")
+          auth = read("auth/token", body=json.dumps({"apiKey": key, "apiSecret": secret}).encode())
+          token = auth.get("accessToken")
+          if not token:
+              raise SystemExit("SSI did not return an access token")
+          print("SSI authentication OK")
+          result = read("data/masterdata?pageIndex=1&pageSize=1", token=token)
+          rows = result.get("data") if isinstance(result, dict) else result
+          if not rows:
+              raise SystemExit("SSI Market Data returned no records")
+          print("SSI Market Data returned records")
+          PY
