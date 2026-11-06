@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import os, sys, math, urllib.parse, urllib.request, ssl, json, base64
 import certifi
 import pandas as pd
-import kbs_client
+import ssi_client
 
 ROOT=Path(__file__).resolve().parent
 SIGNALS=ROOT/"FORWARD_SIGNALS.csv"
@@ -97,7 +97,7 @@ def capture(mode="morning"):
     print(f"FORWARD CAPTURE {session}: {added} rows | ledger total {total}")
 
 def fetch_history(symbol,start,end):
-    d=kbs_client.lich_su_gia(symbol,start,end)
+    d=ssi_client.lich_su_gia(symbol,start,end)
     if d is None or d.empty: return pd.DataFrame()
     d=d.copy()
     d["time"]=pd.to_datetime(d["time"],errors="coerce").dt.date
@@ -134,7 +134,7 @@ def evaluate():
         pd.DataFrame(columns=RESULT_COLS).to_csv(RESULTS,index=False,encoding="utf-8-sig")
         return sig,pd.DataFrame(columns=RESULT_COLS),{}
     trades,repeats=select_counted_buys(sig)
-    today=date.today(); rows=[]
+    today=datetime.now(VN).date(); rows=[]
     start=(pd.to_datetime(sig["signal_date"]).min().date()-timedelta(days=10)).isoformat()
     vni=fetch_history("VNINDEX",start,today.isoformat())
     for _,s in trades.iterrows():

@@ -4,9 +4,8 @@ from zoneinfo import ZoneInfo
 import time
 import shutil
 import argparse
-import requests
 import pandas as pd
-import kbs_client
+import ssi_client
 
 
 # ============================================================
@@ -236,48 +235,6 @@ def normalize_history(df):
 
 
 # ============================================================
-# VIETCAP DIRECT EOD
-# ============================================================
-
-VIETCAP_URL = "https://trading.vietcap.com.vn/api/chart/OHLCChart/gap-chart"
-VIETCAP_HEADERS = {
-    "Referer": "https://trading.vietcap.com.vn/",
-    "Origin": "https://trading.vietcap.com.vn",
-    "User-Agent": "Mozilla/5.0",
-}
-
-def vietcap_history(symbol, count_back=300):
-    payload = {
-        "timeFrame": "ONE_DAY",
-        "symbols": [symbol],
-        "to": int(time.time()) + 86400,
-        "countBack": count_back,
-    }
-    r = requests.post(VIETCAP_URL, headers=VIETCAP_HEADERS, json=payload, timeout=30)
-    r.raise_for_status()
-    raw = r.json()
-    # Vietcap normally returns arrays directly; tolerate a one-item wrapper.
-    if isinstance(raw, list) and raw and isinstance(raw[0], dict):
-        raw = raw[0]
-    if isinstance(raw, dict) and isinstance(raw.get("data"), dict):
-        raw = raw["data"]
-    if not isinstance(raw, dict):
-        return pd.DataFrame()
-    keys = ["t", "o", "h", "l", "c", "v"]
-    if not all(k in raw for k in keys):
-        return pd.DataFrame()
-    n = min(len(raw[k]) for k in keys)
-    if n == 0:
-        return pd.DataFrame()
-    df = pd.DataFrame({
-        "time": pd.to_datetime(raw["t"][:n], unit="s", utc=True)
-            .tz_convert("Asia/Ho_Chi_Minh").tz_localize(None).normalize(),
-        "open": raw["o"][:n], "high": raw["h"][:n], "low": raw["l"][:n],
-        "close": raw["c"][:n], "volume": raw["v"][:n],
-    })
-    return normalize_history(df)
-
-# ============================================================
 # 4. UPDATE ONE SYMBOL
 # ============================================================
 
@@ -367,37 +324,19 @@ def update_symbol(symbol):
             fetch_start = old_last - timedelta(days=REFRESH_DAYS)
 
     # --------------------------------------------------------
-    # API - REFRESH KBS, KEEP COMPLETED EOD BARS ONLY
+    # API - REFRESH SSI, KEEP COMPLETED EOD BARS ONLY
     # --------------------------------------------------------
 
-    new = kbs_client.lich_su_gia(
+    new = ssi_client.lich_su_gia(
         symbol=symbol,
         start=fetch_start.isoformat(),
-        end=END_DATE.isoformat(),
+        end=(TODAY_VN - timedelta(days=1)).isoformat(),
     )
 
     new = normalize_history(new)
 
     if not new.empty:
         new = new[new["time"] < today_ts].copy()
-
-    # KBS can lag in the early morning. If so, call Vietcap directly.
-    expected_eod = TODAY_VN - timedelta(days=1)
-    while expected_eod.weekday() >= 5:
-        expected_eod -= timedelta(days=1)
-
-    kbs_last = new["time"].max().date() if not new.empty else None
-    if kbs_last is None or kbs_last < expected_eod:
-        try:
-            vci = vietcap_history(symbol)
-            if not vci.empty:
-                vci = vci[vci["time"] < today_ts].copy()
-                vci_last = vci["time"].max().date()
-                if kbs_last is None or vci_last > kbs_last:
-                    new = vci
-                    print(f" [VIETCAP direct -> {vci_last}]", end="")
-        except Exception as e:
-            print(f" [VIETCAP direct error: {e}]", end="")
 
     # --------------------------------------------------------
     # IMPORTANT SAFETY

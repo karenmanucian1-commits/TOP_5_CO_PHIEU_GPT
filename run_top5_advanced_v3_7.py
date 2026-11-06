@@ -18,7 +18,7 @@ elif mode=="session":
     import candidate_gate_v3_5; candidate_gate_v3_5.main()
     import top5_advanced_v3; top5_advanced_v3.main()
 elif mode=="midday":
-    print("11:31 - GIU EOD TOP, CHI CHECK KBS REALTIME",flush=True)
+    print("11:31 - GIU EOD TOP, CHI CHECK SSI REALTIME",flush=True)
     import midday_advanced_v3_6; midday_advanced_v3_6.main()
 else:
     raise SystemExit("Mode chi nhan morning/session/midday")
