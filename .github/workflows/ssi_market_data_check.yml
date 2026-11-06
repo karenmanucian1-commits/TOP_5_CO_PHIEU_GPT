@@ -12,6 +12,27 @@ jobs:
       SSI_API_KEY: ${{ secrets.SSI_API_KEY }}
       SSI_API_SECRET: ${{ secrets.SSI_API_SECRET }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pandas ssi-sdk==3.3.2
+      - name: Check daily, morning and benchmark candles
+        run: |
+          python3 - <<'PY'
+          import pandas as pd
+          import ssi_client
+
+          for symbol in ("FPT", "SSI", "VNINDEX"):
+              daily = ssi_client.lich_su_gia(symbol, "2026-10-01", "2026-10-02")
+              assert len(daily) == 2, f"{symbol}: {len(daily)} daily bars"
+              assert (daily["close"] > 0).all()
+              print(symbol, daily[["time", "close", "volume"]].to_string(index=False))
+          for symbol in ("FPT", "SSI"):
+              bar = ssi_client.morning_bar(symbol, "2026-10-02")
+              assert bar and bar["volume"] > 0, f"{symbol}: no morning volume"
+              print(symbol, bar)
+          PY
       - name: Authenticate and read SSI market data
         run: |
           python3 - <<'PY'
