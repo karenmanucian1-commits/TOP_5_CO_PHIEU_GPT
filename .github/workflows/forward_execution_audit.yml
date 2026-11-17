@@ -1,0 +1,50 @@
+name: Forward execution audit
+on:
+  push:
+    branches: [fix-forward-publication]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SSI_API_KEY: ${{ secrets.SSI_API_KEY }}
+      SSI_API_SECRET: ${{ secrets.SSI_API_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m py_compile forward_test.py
+      - name: Regression and live recalculation
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          import forward_test as f
+          s = pd.Series(dict(symbol="TEST", signal_time="2026-10-27 16:25:00",
+                             buy_low=9, buy_high=11, stop=8, target1=13))
+          original = f.fetch_history
+          f.fetch_history = lambda *args: pd.DataFrame([
+              dict(time=pd.Timestamp("2026-10-27").date(), open=10),
+              dict(time=pd.Timestamp("2026-10-28").date(), open=10)])
+          assert str(f.entry_history(s, pd.Timestamp("2026-10-29").date()).iloc[0].time) == "2026-10-28"
+          s["buy_high"] = 9.5
+          assert f.entry_history(s, pd.Timestamp("2026-10-29").date()).empty
+          f.fetch_history = original
+          sig, res, repeats = f.evaluate()
+          assert not res.empty
+          joined = res.merge(sig, on=["signal_date","session","bot","symbol","strategy_version"], suffixes=("", "_signal"))
+          assert (pd.to_datetime(joined.buy_date) > pd.to_datetime(joined.signal_time).dt.normalize()).all()
+          f.verify_excel(f.build_excel(sig, res, repeats), sig)
+          last = res.sort_values("t").groupby(["signal_date","session","bot","symbol"]).tail(1)
+          print(last[["symbol","buy_date","buy_price","trade_day","return_pct","plan_event"]].to_string(index=False))
+          print("TRADES", len(last), "CLOSED", last.plan_event.fillna("").ne("").sum())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corrected-forward-test
+          path: |
+            FORWARD_RESULTS.csv
+            FORWARD_TEST_CHUNG_KHOAN_GPT.xlsx
