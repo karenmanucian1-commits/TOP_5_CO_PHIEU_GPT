@@ -41,7 +41,7 @@ def save_signals(new_rows):
     d=pd.concat([old,add],ignore_index=True)
     if not d.empty:
         d["symbol"]=d["symbol"].astype(str).str.upper().str.strip()
-        d=d.drop_duplicates(["signal_date","session","bot","strategy_version","symbol"],keep="last")
+        d=d.drop_duplicates(["signal_date","session","bot","strategy_version","symbol"],keep="first")
         d=d.sort_values(["signal_date","session","bot","symbol"])
     d.to_csv(SIGNALS,index=False,encoding="utf-8-sig")
     return len(add),len(d)
@@ -109,24 +109,53 @@ def is_buy_label(x):
 def _trade_key(s):
     return (str(s.signal_date),str(s.session),str(s.bot),str(s.symbol).upper())
 
+def published_time(s):
+    value = pd.to_datetime(s.get("signal_time"), errors="coerce")
+    if pd.isna(value):
+        return None
+    if value.tzinfo is not None:
+        value = value.tz_convert(VN).tz_localize(None)
+    return value
+
+
+def entry_history(s, today):
+    """Conservative daily-data policy: next session open after publication."""
+    published = published_time(s)
+    if published is None:
+        return pd.DataFrame()
+    h = fetch_history(str(s.symbol), published.date().isoformat(), today.isoformat())
+    h = h[h["time"] > published.date()].copy()
+    if h.empty:
+        return h
+    price = fnum(h.iloc[0]["open"])
+    low, high = fnum(s.buy_low), fnum(s.buy_high)
+    stop, target = fnum(s.stop), fnum(s.target1)
+    if not (0 < low <= price <= high and 0 < stop < price < target):
+        return pd.DataFrame()
+    return h
+
+
 def select_counted_buys(sig):
-    buys=sig[sig["status"].map(is_buy_label)].copy()
-    if buys.empty: return buys,{}
-    buys["_dt"]=pd.to_datetime(buys["signal_date"],errors="coerce")
-    buys["_so"]=buys["session"].map({"6:00":0,"11:35":1}).fillna(9)
-    buys=buys.sort_values(["symbol","_dt","_so","signal_time"])
-    keep=[]; repeats={}; today=date.today()
-    for symbol,g in buys.groupby("symbol",sort=False):
-        locked_until=None; active_idx=None
-        for idx,s in g.iterrows():
-            sd=pd.to_datetime(s.signal_date).date()
-            if locked_until is not None and sd<=locked_until:
-                repeats[active_idx]=repeats.get(active_idx,0)+1; continue
-            h=fetch_history(symbol,sd.isoformat(),(today+timedelta(days=60)).isoformat())
-            h=h[h["time"]>sd] if str(s.session)=="6:00" else h[h["time"]>=sd]
-            locked_until=h.iloc[HORIZON]["time"] if len(h)>HORIZON else date.max
-            active_idx=idx; repeats[idx]=0; keep.append(idx)
-    return buys.loc[keep].drop(columns=["_dt","_so"]),repeats
+    buys = sig[sig["status"].map(is_buy_label)].copy()
+    buys["_published"] = pd.to_datetime(buys["signal_time"], errors="coerce")
+    buys = buys.dropna(subset=["_published"]).sort_values(["_published", "bot", "symbol"])
+    keep, repeats, locks = [], {}, {}
+    today = datetime.now(VN).date()
+    for idx, s in buys.iterrows():
+        key = (str(s.bot), str(s.symbol).upper())
+        published = published_time(s)
+        if key in locks and published.date() <= locks[key][0]:
+            active = locks[key][1]
+            repeats[active] += 1
+            continue
+        h = entry_history(s, today)
+        if h.empty:
+            continue
+        locked_until = h.iloc[HORIZON]["time"] if len(h) > HORIZON else date.max
+        locks[key] = (locked_until, idx)
+        repeats[idx] = 0
+        keep.append(idx)
+    return buys.loc[keep].drop(columns=["_published"]), repeats
 
 def evaluate():
     sig=load_csv(SIGNALS,SIGNAL_COLS)
@@ -139,16 +168,15 @@ def evaluate():
     vni=fetch_history("VNINDEX",start,today.isoformat())
     for _,s in trades.iterrows():
         sd=pd.to_datetime(s.signal_date).date(); session=str(s.session); symbol=str(s.symbol).upper()
-        h=fetch_history(symbol,sd.isoformat(),today.isoformat())
-        h=h[h["time"]>sd].copy() if session=="6:00" else h[h["time"]>=sd].copy()
+        h=entry_history(s,today)
         h=h.head(HORIZON+1)
         if h.empty: continue
-        buy_date=h.iloc[0]["time"] if session=="6:00" else sd
-        buy_price=fnum(h.iloc[0]["open"]) if session=="6:00" else fnum(s.entry_price)
+        buy_date=h.iloc[0]["time"]
+        buy_price=fnum(h.iloc[0]["open"])
         if not math.isfinite(buy_price) or buy_price<=0: continue
         v0=vni[vni["time"]==buy_date] if not vni.empty else pd.DataFrame()
         vopen=fnum(v0.iloc[0]["open"]) if not v0.empty else float("nan")
-        stop=fnum(s.stop); t1=fnum(s.target1); hi=-float("inf"); lo=float("inf"); event=""
+        stop=fnum(s.stop); t1=fnum(s.target1); hi=-float("inf"); lo=float("inf"); event=""; exit_price=float("nan")
         for t,r in enumerate(h.itertuples(index=False)):
             close=fnum(r.close); hi=max(hi,fnum(r.high,-float("inf"))); lo=min(lo,fnum(r.low,float("inf")))
             ret=(close/buy_price-1-FEE_RATE)*100
@@ -156,16 +184,39 @@ def evaluate():
             if math.isfinite(vopen) and vopen>0:
                 vv=vni[vni["time"]==r.time]
                 if not vv.empty: vr=(fnum(vv.iloc[0]["close"])/vopen-1)*100
-            if t>=2 and not event:
+            event_bar = r
+            if t == 2:
+                start = pd.Timestamp(r.time) + pd.Timedelta(hours=13)
+                end = pd.Timestamp(r.time) + pd.Timedelta(hours=23, minutes=59)
+                afternoon = ssi_client.candles(symbol, start, end, morning=True)
+                afternoon = afternoon[afternoon["time"].between(start, end)]
+                if afternoon.empty and fnum(r.volume) > 0:
+                    raise RuntimeError(f"Thiếu nến phút T+2: {symbol} {r.time}")
+                event_bars = list(afternoon.itertuples(index=False))
+            else:
+                event_bars = [r] if t > 2 else []
+            for event_bar in event_bars:
                 # Conservative rule shared with backtest: if both conditions occur
                 # in the same daily bar, STOP takes precedence over TARGET 1.
-                if math.isfinite(stop) and close<stop: event=f"Dính cắt lỗ (T{t})"
-                elif math.isfinite(t1) and fnum(r.high,-float("inf"))>=t1: event=f"Chạm chốt lời (T{t})"
+                if math.isfinite(stop) and fnum(event_bar.low) <= stop:
+                    exit_price = min(stop, fnum(event_bar.open))
+                    event = f"Dính cắt lỗ (T{t})"
+                elif math.isfinite(t1) and fnum(event_bar.high,-float("inf")) >= t1:
+                    exit_price = t1
+                    event = f"Chạm chốt lời (T{t})"
+                if event:
+                    break
+            if event:
+                ret = (exit_price / buy_price - 1 - FEE_RATE) * 100
+            elif t == HORIZON:
+                event = f"Hết hạn theo dõi (T{t})"
             rows.append({"signal_date":s.signal_date,"session":session,"bot":s.bot,"strategy_version":s.strategy_version,
                 "symbol":symbol,"buy_date":buy_date.isoformat(),"buy_price":buy_price,"trade_day":r.time.isoformat(),"t":t,
                 "close":close,"return_pct":ret,"vni_return_pct":vr,"alpha_pct":ret-vr if math.isfinite(vr) else float("nan"),
                 "high_since":hi,"low_since":lo,"mfe_pct":(hi/buy_price-1-FEE_RATE)*100,
                 "mae_pct":(lo/buy_price-1-FEE_RATE)*100,"plan_event":event})
+            if event:
+                break
     res=pd.DataFrame(rows,columns=RESULT_COLS)
     if not res.empty: res=res.sort_values(["signal_date","session","bot","symbol","t"])
     res.to_csv(RESULTS,index=False,encoding="utf-8-sig")
@@ -280,8 +331,8 @@ def build_excel(sig,res,repeats=None):
             "VN-Index cùng kỳ %":vni_ret,
             "Hơn VN-Index %":alpha,
             "Kế hoạch bot":plan,
-            "Trạng thái":("Đã đủ 20 phiên" if n>=HORIZON else (f"Đang theo dõi ({max(n,0)}/20 phiên)" if not q.empty else ("THEO DÕI / CHỜ" if not is_buy_label(s.get("status")) else "Chờ phiên T0"))),
-            "Số lần KN lại":0,
+            "Trạng thái":("Đã chốt" if first_event else ("Đã đủ 20 phiên" if n>=HORIZON else (f"Đang theo dõi ({max(n,0)}/20 phiên)" if not q.empty else ("THEO DÕI / CHỜ" if not is_buy_label(s.get("status")) else "Chưa khớp / thiếu giờ phát / tín hiệu lặp")))),
+            "Số lần KN lại":(repeats or {}).get(s.name,0),
         })
         details.append(row)
 
@@ -300,17 +351,20 @@ def build_excel(sig,res,repeats=None):
         q=buy_all[buy_all["Giá mua"].notna()].copy()
         total=len(buy_all)
         entered=len(q)
-        complete=int(q["Trạng thái"].astype(str).str.startswith("Đủ").sum()) if entered else 0
-        tracking=entered-complete
-        hit=int((q["Kế hoạch bot"]=="Chạm chốt lời").sum()) if entered else 0
-        stopn=int((q["Kế hoạch bot"]=="Dính cắt lỗ").sum()) if entered else 0
+        complete=int(q[f"T{HORIZON}"].notna().sum()) if entered else 0
+        tracking=int(q["Kế hoạch bot"].eq("Chưa chạm").sum()) if entered else 0
+        hit=int(q["Kế hoạch bot"].astype(str).str.startswith("Chạm chốt lời").sum()) if entered else 0
+        stopn=int(q["Kế hoạch bot"].astype(str).str.startswith("Dính cắt lỗ").sum()) if entered else 0
+        closed = q[q["Kế hoạch bot"].ne("Chưa chạm")] if entered else q
         summary.append({
             "Bot":bot_full,"Tổng lệnh MUA":total,"Đang theo dõi":tracking,"Đủ 20 phiên":complete,
+            "Đã chốt":len(closed),
+            "Tỷ lệ thắng lệnh đã chốt %":closed["Hiện tại %"].gt(0).mean()*100 if len(closed) else float("nan"),
             "Lãi/lỗ hiện tại TB %":q["Hiện tại %"].mean() if entered else 0,
             "% mã đang lãi":q["Hiện tại %"].gt(0).mean()*100 if entered else 0,
             "VNI cùng kỳ TB %":q["VN-Index cùng kỳ %"].mean() if entered else float("nan"),
             "Hơn VNI TB %":q["Hơn VN-Index %"].mean() if entered else float("nan"),
-            "Chạm chốt lời":hit,"Dính cắt lỗ":stopn,"Chưa chạm":entered-hit-stopn,
+            "Chạm chốt lời":hit,"Dính cắt lỗ":stopn,"Chưa chạm":tracking,
         })
     summary_df=pd.DataFrame(summary)
 
