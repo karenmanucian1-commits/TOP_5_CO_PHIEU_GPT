@@ -351,7 +351,7 @@ def build_excel(sig,res,repeats=None):
         q=buy_all[buy_all["Giá mua"].notna()].copy()
         total=len(buy_all)
         entered=len(q)
-        complete=int(q["Trạng thái"].astype(str).str.startswith("Đã đủ").sum()) if entered else 0
+        complete=int(q[f"T{HORIZON}"].notna().sum()) if entered else 0
         tracking=int(q["Kế hoạch bot"].eq("Chưa chạm").sum()) if entered else 0
         hit=int(q["Kế hoạch bot"].astype(str).str.startswith("Chạm chốt lời").sum()) if entered else 0
         stopn=int(q["Kế hoạch bot"].astype(str).str.startswith("Dính cắt lỗ").sum()) if entered else 0
@@ -364,7 +364,7 @@ def build_excel(sig,res,repeats=None):
             "% mã đang lãi":q["Hiện tại %"].gt(0).mean()*100 if entered else 0,
             "VNI cùng kỳ TB %":q["VN-Index cùng kỳ %"].mean() if entered else float("nan"),
             "Hơn VNI TB %":q["Hơn VN-Index %"].mean() if entered else float("nan"),
-            "Chạm chốt lời":hit,"Dính cắt lỗ":stopn,"Chưa chạm":entered-hit-stopn,
+            "Chạm chốt lời":hit,"Dính cắt lỗ":stopn,"Chưa chạm":tracking,
         })
     summary_df=pd.DataFrame(summary)
 
