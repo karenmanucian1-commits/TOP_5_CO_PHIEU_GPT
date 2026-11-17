@@ -41,7 +41,7 @@ def save_signals(new_rows):
     d=pd.concat([old,add],ignore_index=True)
     if not d.empty:
         d["symbol"]=d["symbol"].astype(str).str.upper().str.strip()
-        d=d.drop_duplicates(["signal_date","session","bot","strategy_version","symbol"],keep="last")
+        d=d.drop_duplicates(["signal_date","session","bot","strategy_version","symbol"],keep="first")
         d=d.sort_values(["signal_date","session","bot","symbol"])
     d.to_csv(SIGNALS,index=False,encoding="utf-8-sig")
     return len(add),len(d)
@@ -190,6 +190,8 @@ def evaluate():
                 end = pd.Timestamp(r.time) + pd.Timedelta(hours=23, minutes=59)
                 afternoon = ssi_client.candles(symbol, start, end, morning=True)
                 afternoon = afternoon[afternoon["time"].between(start, end)]
+                if afternoon.empty and fnum(r.volume) > 0:
+                    raise RuntimeError(f"Thiếu nến phút T+2: {symbol} {r.time}")
                 event_bars = list(afternoon.itertuples(index=False))
             else:
                 event_bars = [r] if t > 2 else []
@@ -353,8 +355,11 @@ def build_excel(sig,res,repeats=None):
         tracking=int(q["Kế hoạch bot"].eq("Chưa chạm").sum()) if entered else 0
         hit=int(q["Kế hoạch bot"].astype(str).str.startswith("Chạm chốt lời").sum()) if entered else 0
         stopn=int(q["Kế hoạch bot"].astype(str).str.startswith("Dính cắt lỗ").sum()) if entered else 0
+        closed = q[q["Kế hoạch bot"].ne("Chưa chạm")] if entered else q
         summary.append({
             "Bot":bot_full,"Tổng lệnh MUA":total,"Đang theo dõi":tracking,"Đủ 20 phiên":complete,
+            "Đã chốt":len(closed),
+            "Tỷ lệ thắng lệnh đã chốt %":closed["Hiện tại %"].gt(0).mean()*100 if len(closed) else float("nan"),
             "Lãi/lỗ hiện tại TB %":q["Hiện tại %"].mean() if entered else 0,
             "% mã đang lãi":q["Hiện tại %"].gt(0).mean()*100 if entered else 0,
             "VNI cùng kỳ TB %":q["VN-Index cùng kỳ %"].mean() if entered else float("nan"),
